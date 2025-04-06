@@ -1,0 +1,144 @@
+/* Basic Styling for YNAB Updater App */
+
+Screen {
+    /* Add some overall padding or layout adjustments if needed */
+}
+
+/* Center content within all modal screens */
+ModalScreen {
+    align: center middle; /* Restore centering */
+}
+
+Header {
+    background: $accent-darken-1;
+    color: $text;
+}
+
+Footer {
+    background: $accent-darken-2;
+    color: $text-muted;
+}
+
+#main-container {
+    padding: 1 2;
+    grid-size: 2;
+    grid-gutter: 1 2;
+    grid-rows: auto 1fr auto; /* Title, scrollable list, button bar */
+}
+
+#accounts-title {
+    column-span: 2;
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#loading-indicator {
+    column-span: 2;
+    width: 100%;
+    height: 1; /* Take up minimal space when hidden */
+    content-align: center middle;
+    color: $accent;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#accounts-list-container {
+    column-span: 2;
+    border: round $accent;
+    padding: 1;
+    width: 100%;
+    /* VerticalScroll handles overflow */
+}
+
+#button-bar {
+    column-span: 2;
+    height: auto;
+    padding-top: 1;
+    /* Align buttons right by default */
+    align: right middle;
+}
+
+#button-bar > Button {
+    width: auto;
+    min-width: 10;
+    /* margin-left: 2; <- Remove, apply to specific buttons or groups */
+}
+
+/* --- Button Placement using Align + Dock override --- */
+#config {
+    dock: left; /* Override container align for this button */
+    margin-right: 2; /* Add space between left and right groups */
+}
+
+#right-button-group {
+    /* This group will be aligned right by the parent #button-bar */
+    /* Ensure it takes minimal width needed for its buttons */
+    width: auto;
+    height: auto; /* Should be default, but explicit doesn't hurt */
+}
+
+#right-button-group > Button {
+    /* Add space between the buttons inside the right group */
+    margin-left: 2;
+}
+
+/* --- Modal Styling (Refactored for Vertical Layout) --- */
+
+/* Style the new Vertical container for confirm modal */
+#confirm-content {
+    padding: 1 2; /* Add padding inside */
+    width: 70%; /* Set a percentage width */
+    max-width: 80; /* Keep max-width as a limit */
+    max-height: 80%;
+    height: auto; /* Allow vertical shrinking */
+    border: thick $accent;
+    background: $panel;
+}
+
+/* Titles and prompts remain similar */
+#confirm-title { /* Assuming this ID remains on the Label */
+    width: 100%; /* Should span full width of confirm-content */
+    text-align: center;
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#confirm-prompt { /* Assuming this ID remains on the Static */
+    margin-bottom: 1;
+    height: auto; /* Let prompt height be automatic */
+}
+
+/* Style the Horizontal container for the buttons */
+#confirm-buttons {
+    height: auto; /* Height determined by buttons */
+    margin-top: 1; /* Space above buttons */
+    align: right middle;
+}
+
+/* General style buttons within the horizontal container */
+#confirm-buttons > Button {
+    height: auto; /* Explicit height for text */
+    margin: 0 1;
+
+}
+
+
+/* Style for AccountRow defined in widgets.py */
+AccountRow {
+    /* Styles moved to widgets.py */
+}
+
+#account-list {
+    column-span: 2;
+    border: round $accent-lighten-1;
+    height: 15; /* Fixed height for scrollable list */
+    margin-bottom: 1;
+    padding: 1;
+}
+
+#account-select-buttons {
+     column-span: 2;
+     align: center middle;
+     height: auto;
+}

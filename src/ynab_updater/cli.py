@@ -6,7 +6,7 @@ import sys
 import typer
 from rich.logging import RichHandler
 
-from .screens import UpdaterApp
+from .app import YnabUpdater
 
 app = typer.Typer(add_completion=False)
 
@@ -40,7 +40,7 @@ def run(
     """Launch the YNAB Updater TUI application."""
     setup_logging(log_level)
     try:
-        tui_app = UpdaterApp()
+        tui_app = YnabUpdater()
         tui_app.run()
     except Exception as e:
         logging.exception("An unexpected error occurred while running the application.")

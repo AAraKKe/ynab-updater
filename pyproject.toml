@@ -35,7 +35,9 @@ ynab-updater = "ynab_updater.cli:app"
 
 [tool.hatch.envs.dev]
 dependencies = [
-  "textual-dev"
+  "textual-dev",
+  # Need for vscode to discover tests
+  "pytest",
 ]
 
 [tool.hatch.envs.dev.scripts]
