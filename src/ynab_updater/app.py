@@ -1,22 +1,22 @@
 """Main application screen and configuration screen."""
 
-import contextlib
-from functools import partial
+from collections.abc import Callable
 
 from pydantic import SecretStr
 from rich.text import Text
-from textual import on
+from textual import on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.reactive import var
 from textual.widgets import Button, Footer, Header, LoadingIndicator, Static
 
-from .config import CONFIG_FILE, AccountConfig, AppConfig, load_config, save_config
+from .config import CONFIG_FILE, Account, AppConfig
 from .modals import AccountSelectModal, APIKeyModal, BudgetSelectModal, ConfirmModal, create_bulk_update_prompt
 from .screens import ConfigScreen
-from .utils import parse_currency_to_milliunits
-from .widgets import AccountRow, format_currency
-from .ynab_client import Account, BudgetSummary, YNABClientError, YnabHandler
+from .utils import format_currency, parse_currency_to_milliunits
+from .widgets import AccountRow
+from .ynab_client import Account as YnabAccount
+from .ynab_client import BudgetSummary, YNABClientError, YnabHandler
 
 
 class YnabUpdater(App[None]):
@@ -24,17 +24,15 @@ class YnabUpdater(App[None]):
 
     TITLE = "YNAB Updater"
     SUB_TITLE = "Quickly update account balances"
-    CSS_PATH = "app.tcss"  # We'll create this file next
+    CSS_PATH = "app.tcss"
     BINDINGS = [
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+r", "refresh_balances", "Refresh Balances"),
         ("f10", "reset_config_and_exit", "Reset Config (F10)"),
-        # Add more bindings as needed
     ]
 
-    config: var[AppConfig] = var(load_config)
-    accounts_data: var[dict[str, Account]] = var({})
-    selected_budget_id: var[str | None] = var(None)
+    config: var[AppConfig] = var(AppConfig.load)
+    accounts_data: var[dict[str, YnabAccount]] = var({})
     is_loading: var[bool] = var(False)
     ynab_handler: var[YnabHandler | None] = var(None)
 
@@ -59,7 +57,7 @@ class YnabUpdater(App[None]):
         """Called when the app is first mounted."""
         self.set_loading(True)
         # Run the async setup logic in a worker
-        self.run_worker(self.check_initial_setup, thread=True)
+        self.check_initial_setup()
 
     def set_loading(self, loading: bool):
         """Show/hide loading indicator and disable/enable buttons."""
@@ -67,15 +65,15 @@ class YnabUpdater(App[None]):
         indicator = self.query_one(LoadingIndicator)
         indicator.display = loading
         # Disable/enable action buttons while loading
-        for button_id in ["refresh-balances", "update-all", "config"]:
-            with contextlib.suppress(Exception):
-                self.query_one(f"#{button_id}", Button).disabled = loading
-        # Also disable individual account update buttons
-        for row in self.query(AccountRow):
-            with contextlib.suppress(Exception):
-                row.query_one(Button).disabled = loading
+        # for button_id in ["refresh-balances", "update-all", "config"]:
+        #     with contextlib.suppress(Exception):
+        #         self.query_one(f"#{button_id}", Button).disabled = loading
+        # # Also disable individual account update buttons
+        # for row in self.query(AccountRow):
+        #     with contextlib.suppress(Exception):
+        #         row.query_one(Button).disabled = loading
 
-    # This method runs in a worker thread
+    @work
     async def check_initial_setup(self):
         """Check for API key and account selection on startup."""
         self.log.info("Checking initial setup...")
@@ -83,7 +81,7 @@ class YnabUpdater(App[None]):
         if not self.config.ynab_api_key:
             self.log.info("API key not found, prompting user.")
             action_to_take = self.prompt_for_api_key
-        elif not self.config.selected_budget_id:
+        elif not self.config.has_selected_budget:
             self.log.info("Budget not selected, prompting user.")
             action_to_take = self.prompt_for_budget
         elif not self.config.selected_accounts:
@@ -95,20 +93,26 @@ class YnabUpdater(App[None]):
             action_to_take = self.load_budget_and_accounts
 
         # Schedule the determined action (if any) and final loading state update
-        if action_to_take:
-            self.call_from_thread(action_to_take)
-        else:  # Should ideally always have an action, but just in case
-            # Schedule setting loading state off on the main thread
-            self.call_from_thread(self.set_loading, False)
+        if action_to_take is not None:
+            await action_to_take()
+        else:
+            self.set_loading(False)
 
-        # Note: We no longer call self.set_loading(False) directly here.
-        # The scheduled action (e.g., load_budget_and_accounts) is responsible
-        # for calling set_loading(False) when it completes *on the main thread*.
+    def call_ynab[**P, R](self, callback: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R | None:
+        return_value = None
+
+        try:
+            return_value = callback(*args, **kwargs)
+        except Exception as e:
+            self.notify(f"There was an error communicating with YNAB: {e}")
+
+        return return_value
 
     def _initialize_ynab_handler(self) -> bool:
         """Initializes the YNAB handler if possible. Returns True on success."""
         if self.ynab_handler:
-            return True  # Already initialized
+            return True
+
         if self.config.ynab_api_key:
             try:
                 self.ynab_handler = YnabHandler(self.config.ynab_api_key)
@@ -122,13 +126,12 @@ class YnabUpdater(App[None]):
             self.call_later(self.prompt_for_api_key)
             return False
 
-    # TODO Rename this here and in `_initialize_ynab_handler`
     def _handle_initialization_error(self, e: ValueError):
         self.log.error(f"Failed to initialize YnabHandler: {e}")
         self.notify(f"API Key Error: {e}", severity="error")
         # Reset key if initialization fails
         self.config.ynab_api_key = None
-        save_config(self.config)
+        self.config.refresh()
         self.call_later(self.prompt_for_api_key)
         return False
 
@@ -142,7 +145,8 @@ class YnabUpdater(App[None]):
                 return
 
             self.config.ynab_api_key = SecretStr(api_key)
-            save_config(self.config)
+            self.config.refresh()
+
             if self._initialize_ynab_handler():
                 self.notify("API Key saved!", severity="information")
                 # Now prompt for BUDGET
@@ -156,211 +160,128 @@ class YnabUpdater(App[None]):
         if not self._initialize_ynab_handler():
             self.set_loading(False)
             return
+
         assert self.ynab_handler is not None
 
         self.set_loading(True)
-        try:
-            self.log.info("Fetching budgets...")
-            budgets = self.ynab_handler.get_budgets()
 
-            if not budgets:
-                self.notify("No budgets found. Check API key or YNAB status.", severity="error")
+        self.log.info("Fetching budgets...")
+        budgets = self.call_ynab(self.ynab_handler.get_budgets, include_accounts=True)
+
+        if budgets is None:
+            self.set_loading(False)
+            return
+
+        if not budgets:
+            self.notify("No budgets found. Check API key or YNAB status.", severity="error")
+            self.set_loading(False)
+            return
+
+        self.config.add_budgets_from_api(budgets)
+        self.config.refresh()
+
+        # Define the callback for when a budget is selected
+        async def save_selected_budget(selected_budget: BudgetSummary | None):
+            if selected_budget is None:
+                self.notify("Budget selection cancelled.", severity="warning")
                 self.set_loading(False)
-                # TODO: Consider re-prompting for API key?
                 return
 
-            # Define the callback for when a budget is selected
-            async def save_selected_budget(selected_budget: BudgetSummary | None):
-                if selected_budget:
-                    self.config.selected_budget_id = selected_budget.id
-                    self.config.selected_budget_name = selected_budget.name
-                    # Extract and save currency format
-                    if cf := selected_budget.currency_format:
-                        self.config.currency_symbol = cf.currency_symbol
-                        self.config.currency_decimal_digits = cf.decimal_digits
-                        self.config.currency_symbol_first = cf.symbol_first
-                        self.log.info(f"Set currency format: {cf.iso_code}, Symbol: {cf.currency_symbol}")
-                    else:
-                        # Use defaults if format is missing (shouldn't happen)
-                        self.log.warning(f"Currency format missing for budget {selected_budget.name}. Using defaults.")
-                        self.config.currency_symbol = "$"
-                        self.config.currency_decimal_digits = 2
-                        self.config.currency_symbol_first = True
+            # Set the selected label
+            self.config.budget_by_id(selected_budget.id).selected = True
 
-                    save_config(self.config)
-                    self.notify(f"Budget '{self.config.selected_budget_name}' selected.", severity="information")
-                    # Now prompt for accounts
-                    self.set_loading(True)
-                    self.call_later(self.prompt_for_accounts)
-                else:
-                    self.notify("Budget selection cancelled.", severity="warning")
-                    # If no budget previously selected, maybe exit or re-prompt?
-                    if not self.config.selected_budget_id:
-                        self.exit()
-                    else:  # Keep existing selection if user cancels
-                        self.set_loading(False)  # Ensure loading is off
+            # Load accounts for this budget
+            if selected_budget.accounts is not None:
+                if not selected_budget.accounts:
+                    self.notify(f"The budget {selected_budget.name!r} has no accounts", severity="error")
+                self.config.add_accounts_from_api(selected_budget.accounts)
 
-            # Show the budget selection modal
-            await self.push_screen(BudgetSelectModal(budgets), save_selected_budget)
+            self.config.refresh()
+            self.notify(f"Budget '{selected_budget.name}' selected.", severity="information")
+            # Now prompt for accounts
+            self.set_loading(True)
+            self.call_later(self.prompt_for_accounts)
 
-        except (YNABClientError, AttributeError) as e:
-            self.notify(f"YNAB API Error fetching budgets: {e}", severity="error", timeout=7)
-            self.set_loading(False)
-            # Handle potential invalid key
-            if "Unauthorized" in str(e):
-                self.config.ynab_api_key = None
-                self.config.selected_budget_id = None  # Also clear budget selection
-                self.config.selected_budget_name = None
-                # Also reset currency settings
-                self.config.currency_symbol = "$"
-                self.config.currency_decimal_digits = 2
-                self.config.currency_symbol_first = True
-                save_config(self.config)
-                await self.prompt_for_api_key()
-        except Exception as e:
-            self.log.error(f"Error during budget selection: {e}")
-            self.notify(f"Error fetching budgets: {e}", severity="error", timeout=7)
-            self.set_loading(False)
+        # Show the budget selection modal
+        await self.push_screen(BudgetSelectModal(budgets), save_selected_budget)
 
     async def prompt_for_accounts(self):
         """Fetches accounts and displays the modal for selection."""
-        # Ensure handler is initialized first
-        if not self._initialize_ynab_handler():
-            self.set_loading(False)  # Ensure loading is off if handler init fails
-            return
-        # Add assert to satisfy type checker
-        assert self.ynab_handler is not None
 
-        try:
-            if not self.config.selected_budget_id:
-                self.log.error("Cannot select accounts: No budget selected.")
-                self.notify("No budget selected. Please configure first.", severity="error")
-                # Maybe prompt for budget again?
-                self.call_later(self.prompt_for_budget)
+        if len(self.config.accounts) == 0:
+            # We should have the accounts already, but lets try to get them
+            if not self._initialize_ynab_handler():
+                self.set_loading(False)
+                return
+            # Add assert to satisfy type checker
+            assert self.ynab_handler is not None
+
+            ynab_accounts = self.call_ynab(self.ynab_handler.get_accounts, self.config.selected_budget.id)
+
+            if ynab_accounts is None:
+                self.set_loading(False)
                 return
 
-            self.selected_budget_id = self.config.selected_budget_id  # Use stored ID
-            self.log.info(
-                f"Fetching accounts for selected budget: {self.config.selected_budget_name} ({self.selected_budget_id})"
-            )
+            self.config.add_accounts_from_api(ynab_accounts)
 
-            # --- Fetch Accounts --- #
-            self.log.info(f"Fetching accounts for budget {self.selected_budget_id}...")
-            # Call method on handler instance
-            all_accounts = self.run_worker(
-                partial(self.ynab_handler.get_accounts, self.selected_budget_id),
-                thread=True,
-            )
+        prev_selected_ids = [acc.id for acc in self.config.selected_accounts]
 
-            prev_selected_ids = [acc.id for acc in self.config.selected_accounts]
+        async def save_selected_accounts(
+            selected: list[Account] | None,
+        ):
+            if not selected:
+                self.notify(
+                    "Account selection cancelled or no accounts chosen.",
+                    severity="warning",
+                )
+                if not self.config.selected_accounts:
+                    self.exit()
+            else:
+                for account in selected:
+                    account.selected = True
 
-            # --- Define callback for AccountSelectModal --- #
-            async def save_selected_accounts(
-                selected: list[AccountConfig],
-            ):
-                # This callback runs on the main thread after modal dismiss
-                if not selected:
-                    self.notify(
-                        "Account selection cancelled or no accounts chosen.",
-                        severity="warning",
-                    )
-                    if not self.config.selected_accounts:
-                        self.exit()
-                else:
-                    self.config.selected_accounts = selected
-                    save_config(self.config)
-                    self.notify(f"{len(selected)} accounts selected.", severity="information")
-                    self.set_loading(True)
-                    # Schedule loading on main thread (call_later is safe)
-                    self.call_later(self.load_budget_and_accounts)
+                self.notify(f"{len(selected)} accounts selected.", severity="information")
+                self.config.refresh()
 
-            all_accounts = await all_accounts.wait()
+                self.set_loading(True)
+                # Schedule loading on main thread (call_later is safe)
+                self.call_later(self.load_budget_and_accounts)
 
-            await self.push_screen(
-                AccountSelectModal(all_accounts, prev_selected_ids),
-                save_selected_accounts,
-            )
-
-        except (YNABClientError, AttributeError) as e:  # Catch AttributeError if handler is None
-            self.notify(f"YNAB API Error: {e}", severity="error", timeout=7)
-            if "Unauthorized" in str(e):
-                self.config.ynab_api_key = None
-                self.config.selected_budget_id = None
-                self.config.selected_budget_name = None
-                # Also reset currency settings
-                self.config.currency_symbol = "$"
-                self.config.currency_decimal_digits = 2
-                self.config.currency_symbol_first = True
-                save_config(self.config)
-                await self.prompt_for_api_key()
-        except Exception as e:
-            self.log.error(f"An unexpected error occurred during account selection setup: {e}")
-            self.notify(f"Error selecting accounts: {e}", severity="error", timeout=7)
-        # No finally block needed here as set_loading(False) is handled by callbacks/next steps
+        await self.push_screen(
+            AccountSelectModal(self.config.accounts, prev_selected_ids),
+            save_selected_accounts,
+        )
 
     async def load_budget_and_accounts(self):
         """Loads the primary budget (if not already set) and account details."""
-        # This now runs on the main thread via call_from_thread or call_later
-        # Ensure handler is initialized
         if not self._initialize_ynab_handler():
             self.set_loading(False)
             return
-        # Add assert to satisfy type checker
+
         assert self.ynab_handler is not None
 
         self.set_loading(True)
-        try:
-            if not self.config.ynab_api_key:
-                await self.prompt_for_api_key()
-                return
-            if not self.config.selected_accounts:
-                await self.prompt_for_accounts()
-                return
 
-            # Ensure budget ID is set
-            if not self.config.selected_budget_id:
-                self.log.warning("load_budget_and_accounts called without selected budget.")
-                await self.prompt_for_budget()
-                return
+        self.selected_budget_id = self.config.selected_budget.id
 
-            self.selected_budget_id = self.config.selected_budget_id  # Ensure reactive var matches config
+        self.log.info("Fetching details for selected accounts...")
 
-            self.log.info("Fetching details for selected accounts...")
-            # Store Account objects directly
-            new_accounts_data: dict[str, Account] = {}
-            for acc_config in self.config.selected_accounts:
-                if account_detail := self.ynab_handler.get_account_by_id(
-                    self.selected_budget_id,
-                    acc_config.id,
-                ):
-                    # Store the Account object
-                    new_accounts_data[acc_config.id] = account_detail
-                else:
-                    self.log.warning(f"Could not fetch details for account: {acc_config.name} ({acc_config.id}).")
+        new_accounts_data: dict[str, YnabAccount] = {}
+        for acc_config in self.config.selected_accounts:
+            if account_detail := self.call_ynab(
+                self.ynab_handler.get_account_by_id,
+                self.selected_budget_id,
+                acc_config.id,
+            ):
+                # Store the Account object
+                new_accounts_data[acc_config.id] = account_detail
+            else:
+                self.log.warning(f"Could not fetch details for account: {acc_config.name} ({acc_config.id}).")
 
-            self.accounts_data = new_accounts_data
-            # Update UI (safe as we are on main thread)
-            await self.update_account_rows()
-
-        except (YNABClientError, AttributeError) as e:  # Catch AttributeError if handler is None
-            self.notify(f"YNAB API Error loading accounts: {e}", severity="error", timeout=7)
-            if "Unauthorized" in str(e):
-                self.config.ynab_api_key = None
-                self.config.selected_budget_id = None  # Also clear budget selection
-                self.config.selected_budget_name = None
-                # Also reset currency settings
-                self.config.currency_symbol = "$"
-                self.config.currency_decimal_digits = 2
-                self.config.currency_symbol_first = True
-                save_config(self.config)
-                await self.prompt_for_api_key()
-            self.log.error(e)
-        except Exception as e:
-            self.log.error(f"Error loading account data: {e}")
-            self.notify(f"Error loading accounts: {e}", severity="error", timeout=7)
-        finally:
-            # Ensure loading is off now that we're done on the main thread
-            self.set_loading(False)
+        self.accounts_data = new_accounts_data
+        self.set_loading(False)
+        # Update UI (safe as we are on main thread)
+        await self.update_account_rows()
 
     async def update_account_rows(self) -> None:
         """Clears and repopulates the account list container with AccountRow widgets."""
@@ -371,6 +292,7 @@ class YnabUpdater(App[None]):
 
         if not self.accounts_data:
             container.mount(Static("No account data loaded or available."))
+            container.mount(Static(str(self.accounts_data)))
             return
 
         # Access name attribute of Account objects for sorting
@@ -380,14 +302,13 @@ class YnabUpdater(App[None]):
         )
 
         for account_id in sorted_account_ids:
-            account: Account = self.accounts_data[account_id]
-            # Account object guarantees name and balance attributes exist
-            if account:
+            if account := self.accounts_data[account_id]:
                 row = AccountRow(
                     account_id=account_id,
                     account_name=account.name,
                     current_balance=account.balance,
                     id=f"account-row-{account_id}",
+                    format=self.config.selected_budget.currency_format,
                 )
                 container.mount(row)
 
@@ -464,6 +385,8 @@ class YnabUpdater(App[None]):
             )
             return
 
+        assert self.ynab_handler is not None
+
         account_id = message.account_id
         new_balance_str = message.new_balance_str
 
@@ -499,21 +422,8 @@ class YnabUpdater(App[None]):
             return
 
         # --- 4. Confirmation Modal --- #
-        # Use stored currency settings
-        # Assign to vars to help type checker
-        symbol = self.config.currency_symbol or "$"
-        symbol_first = self.config.currency_symbol_first
-
-        adjustment_str = format_currency(
-            adjustment_amount,
-            symbol,
-            symbol_first,
-        )
-        new_balance_formatted = format_currency(
-            new_balance_milliunits,
-            symbol,
-            symbol_first,
-        )
+        adjustment_str = format_currency(adjustment_amount, self.config.selected_budget.currency_format)
+        new_balance_formatted = format_currency(new_balance_milliunits, self.config.selected_budget.currency_format)
         color = "green" if adjustment_amount >= 0 else "red"
         prompt = Text.assemble(
             "Create an adjustment of ",
@@ -524,6 +434,8 @@ class YnabUpdater(App[None]):
 
         # Define the callback as an inner function to capture local scope
         async def handle_confirmation(confirmed: bool | None) -> None:
+            assert self.ynab_handler is not None
+
             # --- 5. Create Transaction if Confirmed --- #
             if confirmed is True:
                 self.set_loading(True)
@@ -531,10 +443,10 @@ class YnabUpdater(App[None]):
                     self.log.info(f"User confirmed adjustment for {account_name}.")
                     # Call method on handler instance
                     self.ynab_handler.create_transaction(
-                        self.selected_budget_id,
+                        self.config.selected_budget.id,
                         account_id,
                         adjustment_amount,
-                        self.config.adjustment_cleared_status,
+                        self.config.adjustment_cleared_status.value,
                         self.config.adjustment_memo,
                     )
 
@@ -618,6 +530,7 @@ class YnabUpdater(App[None]):
 
         # Define the callback as an inner function
         async def handle_bulk_confirmation(confirmed: bool | None) -> None:
+            assert self.ynab_handler is not None
             # --- 3. Create Transactions if Confirmed --- #
             if confirmed is True:
                 self.set_loading(True)
@@ -638,7 +551,7 @@ class YnabUpdater(App[None]):
                     self.log.info(f"User confirmed bulk update for {len(transactions_payload)} accounts.")
                     # Call method on handler instance
                     self.ynab_handler.create_transactions(
-                        self.selected_budget_id,
+                        self.config.selected_budget.id,
                         transactions_payload,
                     )
                     self.notify(

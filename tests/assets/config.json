@@ -1,0 +1,72 @@
+{
+  "ynab_api_key": "mykey",
+  "budgets": [
+      {
+          "config": {
+              "id": "buget1",
+              "name": "Budget 1",
+              "currency_format": {
+                  "decimal_digits": 2,
+                  "decimal_separator": ",",
+                  "group_separator": ".",
+                  "symbol_first": false,
+                  "currency_symbol": "€"
+              }
+          },
+          "selected": false
+      },
+      {
+          "config": {
+              "id": "buget2",
+              "name": "Budget 2",
+              "currency_format": {
+                  "decimal_digits": 2,
+                  "decimal_separator": ".",
+                  "group_separator": ",",
+                  "symbol_first": true,
+                  "currency_symbol": "$"
+              }
+          },
+          "selected": true
+      },
+      {
+          "config": {
+              "id": "buget3",
+              "name": "Budget 3",
+              "currency_format": {
+                  "decimal_digits": 2,
+                  "decimal_separator": ".",
+                  "group_separator": ",",
+                  "symbol_first": true,
+                  "currency_symbol": "$"
+              }
+          },
+          "selected": false
+      }
+  ],
+  "accounts": [
+      {
+          "config": {
+              "id": "acc1",
+              "name": "Account 1"
+          },
+          "selected": true
+      },
+      {
+          "config": {
+              "id": "acc2",
+              "name": "Account 2"
+          },
+          "selected": true
+      },
+      {
+          "config": {
+              "id": "acc3",
+              "name": "Account 3"
+          },
+          "selected": false
+      }
+  ],
+  "adjustment_memo": "Balance adjustment by YNAB Updater",
+  "adjustment_cleared_status": "cleared"
+}

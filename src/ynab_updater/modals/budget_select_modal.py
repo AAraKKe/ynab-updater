@@ -3,7 +3,7 @@
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, RadioButton, RadioSet
+from textual.widgets import Button, Label, RadioButton, RadioSet, TextArea
 
 from ..ynab_client import BudgetSummary
 from .utils import _extract_base_id, _generate_widget_id
@@ -23,6 +23,7 @@ class BudgetSelectModal(ModalScreen[BudgetSummary | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="budget-select-dialog", classes="modal-dialog"):
             yield Label("Select YNAB Budget", id="budget-select-title")
+            yield TextArea("These are the budgets present in your YNAB account.")
             with VerticalScroll(id="budget-list"):
                 with RadioSet(id="budget-radio-set"):
                     for i, budget in enumerate(self.sorted_budgets):
@@ -34,8 +35,8 @@ class BudgetSelectModal(ModalScreen[BudgetSummary | None]):
                             value=(i == 0),  # Select first one initially
                         )
             with Horizontal(id="budget-select-buttons", classes="modal-buttons"):
-                yield Button("Select Budget", variant="primary", id="select-budget")
                 yield Button("Cancel", variant="default", id="cancel-selection")
+                yield Button("Select Budget", variant="primary", id="select-budget")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "select-budget":

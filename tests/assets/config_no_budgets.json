@@ -1,0 +1,15 @@
+{
+    "ynab_api_key": "mykey",
+    "budgets": [],
+    "accounts": [
+        {
+            "config": {
+                "id": "acc1",
+                "name": "Account 1"
+            },
+            "selected": true
+        }
+    ],
+    "adjustment_memo": "Balance adjustment by YNAB Updater",
+    "adjustment_cleared_status": "cleared"
+}

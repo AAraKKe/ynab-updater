@@ -1,12 +1,6 @@
 /* Basic Styling for YNAB Updater App */
-
-Screen {
-    /* Add some overall padding or layout adjustments if needed */
-}
-
-/* Center content within all modal screens */
 ModalScreen {
-    align: center middle; /* Restore centering */
+    align: center middle;
 }
 
 Header {
@@ -85,44 +79,55 @@ Footer {
 
 /* --- Modal Styling (Refactored for Vertical Layout) --- */
 
-/* Style the new Vertical container for confirm modal */
-#confirm-content {
-    padding: 1 2; /* Add padding inside */
-    width: 70%; /* Set a percentage width */
-    max-width: 80; /* Keep max-width as a limit */
-    max-height: 80%;
-    height: auto; /* Allow vertical shrinking */
+/* Common modal dialog styling */
+.modal-dialog {
+    padding: 1 2;
+    width: 70%;
+    max-width: 100%;
+    max-height: 90%;
+    height: auto;
     border: thick $accent;
     background: $panel;
 }
 
-/* Titles and prompts remain similar */
-#confirm-title { /* Assuming this ID remains on the Label */
-    width: 100%; /* Should span full width of confirm-content */
+/* Style the first label in a modal (title) */
+.modal-dialog Label:first-of-type {
+    width: 100%;
     text-align: center;
     margin-bottom: 1;
     text-style: bold;
 }
 
-#confirm-prompt { /* Assuming this ID remains on the Static */
+/* Style other labels in a modal */
+.modal-dialog Label {
     margin-bottom: 1;
-    height: auto; /* Let prompt height be automatic */
+    height: auto;
 }
 
-/* Style the Horizontal container for the buttons */
-#confirm-buttons {
-    height: auto; /* Height determined by buttons */
-    margin-top: 1; /* Space above buttons */
+/* Style static elements in a modal */
+.modal-dialog Static {
+    margin-bottom: 1;
+    height: auto;
+}
+
+/* Style input fields in a modal */
+.modal-dialog Input {
+    margin-bottom: 1;
+    width: 100%;
+}
+
+/* Style button containers in modals */
+.modal-buttons {
+    height: auto;
+    margin-top: 1;
     align: right middle;
 }
 
-/* General style buttons within the horizontal container */
-#confirm-buttons > Button {
-    height: auto; /* Explicit height for text */
+/* Style buttons within modal button containers */
+.modal-buttons > Button {
+    height: auto;
     margin: 0 1;
-
 }
-
 
 /* Style for AccountRow defined in widgets.py */
 AccountRow {
@@ -132,10 +137,11 @@ AccountRow {
 #account-list {
     column-span: 2;
     border: round $accent-lighten-1;
-    height: 15; /* Fixed height for scrollable list */
+    height: 30;
     margin-bottom: 1;
     padding: 1;
 }
+
 
 #account-select-buttons {
      column-span: 2;

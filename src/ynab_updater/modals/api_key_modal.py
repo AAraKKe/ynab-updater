@@ -1,7 +1,7 @@
 """Modal for entering the YNAB API Key."""
 
 from textual.app import ComposeResult
-from textual.containers import Grid
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label
 
@@ -12,15 +12,16 @@ class APIKeyModal(ModalScreen[str]):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
     def compose(self) -> ComposeResult:
-        with Grid(id="api-key-dialog"):
+        with Vertical(id="api-key-dialog", classes="modal-dialog"):
             yield Label("Enter YNAB API Key", id="api-key-title")
             yield Label(
                 "You can generate a Personal Access Token in your YNAB account settings under 'Developer Settings'.",
                 id="api-key-description",
             )
             yield Input(placeholder="Paste your API key here", password=True, id="api-key-input")
-            yield Button("Submit", variant="primary", id="submit-key")
-            yield Button("Cancel", variant="default", id="cancel-key")
+            with Horizontal(id="api-key-buttons", classes="modal-buttons"):
+                yield Button("Submit", variant="primary", id="submit-key")
+                yield Button("Cancel", variant="default", id="cancel-key")
 
     def on_mount(self):
         """Focus the input field when the modal mounts."""

@@ -38,6 +38,7 @@ dependencies = [
   "textual-dev",
   # Need for vscode to discover tests
   "pytest",
+  "pytest-cov",
 ]
 
 [tool.hatch.envs.dev.scripts]

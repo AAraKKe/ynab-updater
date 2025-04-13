@@ -60,12 +60,12 @@ class YnabHandler:
 
     # --- Methods corresponding to previous functions --- #
 
-    def get_budgets(self) -> list[BudgetSummary]:
+    def get_budgets(self, include_accounts=False) -> list[BudgetSummary]:
         """Fetches the list of budgets for the user using the YNAB SDK."""
         logger.info("Calling get_budgets")
         client_api = budgets_api.BudgetsApi(self._client)
         try:
-            response = client_api.get_budgets()
+            response = client_api.get_budgets(include_accounts=include_accounts)
             logger.info(response)
             return response.data.budgets
         except ApiException as e:

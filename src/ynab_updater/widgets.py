@@ -5,26 +5,8 @@ from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Button, Input, Label
 
-
-def format_currency(milliunits: int, currency_symbol: str = "$", symbol_first: bool = True) -> str:
-    """Formats an integer amount in milliunits into a currency string."""
-    # Determine sign first
-    is_negative = milliunits < 0
-    abs_milliunits = abs(milliunits)
-
-    # Convert absolute milliunits to dollars and cents
-    total_cents = abs_milliunits // 10
-    dollars = total_cents // 100
-    cents = total_cents % 100
-
-    # Format the absolute value
-    value_part = f"{dollars}.{cents:02d}"
-
-    # Add currency symbol based on flag
-    formatted_value = f"{currency_symbol}{value_part}" if symbol_first else f"{value_part}{currency_symbol}"
-
-    # Prepend the negative sign if necessary
-    return f"-{formatted_value}" if is_negative else formatted_value
+from ynab_updater.config import CurrencyFormat
+from ynab_updater.utils import format_currency
 
 
 class AccountRow(Widget):
@@ -77,14 +59,17 @@ class AccountRow(Widget):
             self.new_balance_str = new_balance_str
             super().__init__()
 
-    def __init__(self, account_id: str, account_name: str, current_balance: int, **kwargs) -> None:
+    def __init__(
+        self, account_id: str, account_name: str, current_balance: int, format: CurrencyFormat, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         self.account_id = account_id
         self.account_name = account_name
         self.current_balance_milliunits = current_balance
+        self.format = format
 
         self._name_label = Label(account_name)
-        self._balance_label = Label(format_currency(current_balance), classes="balance-label")
+        self._balance_label = Label(format_currency(current_balance, format), classes="balance-label")
         self._balance_input = Input(placeholder="New Balance (e.g., 123.45)")
         self._update_button = Button("Update", variant="success", id=f"update-{account_id}")
 
@@ -105,7 +90,7 @@ class AccountRow(Widget):
     def update_balance(self, new_balance_milliunits: int) -> None:
         """Updates the displayed current balance."""
         self.current_balance_milliunits = new_balance_milliunits
-        self._balance_label.update(format_currency(new_balance_milliunits))
+        self._balance_label.update(format_currency(new_balance_milliunits, self.format))
 
     @property
     def new_balance_input_value(self) -> str:

@@ -2,6 +2,8 @@ import logging
 import re
 from collections import Counter
 
+from ynab_updater.config import CurrencyFormat
+
 LEADING_PM_SIGNS_REGEXP = re.compile(r"([+\-\s]*)(.*)")
 INVALID_CURRENCY_REGEXP = re.compile(r"[^\d\.,+\-]")
 VALID_CURRENCY_REGEXP = re.compile(r"[\d\.,+\-]")
@@ -24,6 +26,29 @@ def parse_currency_to_milliunits(value_str: str) -> int | None:
     except (ValueError, IndexError) as e:
         logging.warning(f"Could not parse currency value: {value_str} (Reason: {e})")
         return None
+
+
+def format_currency(value: int, format: CurrencyFormat) -> str:
+    dec_value = value / 1000
+
+    str_value = f"{dec_value:,.{format.decimal_digits}f}"
+
+    # We can end up with something like -0
+    if str_value == "-0":
+        str_value = "0"
+
+    gruop_placeholder = "@@grup_placeholder@@"
+    str_value = (
+        str_value.replace(",", gruop_placeholder)
+        .replace(".", format.decimal_separator)
+        .replace(gruop_placeholder, format.group_separator)
+    )
+
+    if format.symbol_first:
+        if str_value.startswith("-"):
+            return f"-{format.currency_symbol}{str_value[1:]}"
+        return f"{format.currency_symbol}{str_value}"
+    return f"{str_value}{format.currency_symbol}"
 
 
 def _string_value_to_float(value: str) -> float | None:

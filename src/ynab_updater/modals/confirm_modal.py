@@ -28,10 +28,10 @@ class ConfirmModal(ModalScreen[bool]):
         self._cancel_label = cancel_label
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="confirm-content"):
-            yield Label(self._title, id="confirm-title")
-            yield Static(self._prompt, id="confirm-prompt")
-            with Horizontal(id="confirm-buttons"):
+        with Vertical(classes="modal-dialog"):
+            yield Label(self._title)
+            yield Static(self._prompt)
+            with Horizontal(classes="modal-buttons"):
                 yield Button(self._cancel_label, variant="error", id="cancel")
                 yield Button(self._confirm_label, variant="primary", id="confirm")
 

@@ -1,10 +1,12 @@
 import logging
 
 import pytest
+from src.ynab_updater.config import CurrencyFormat
 from src.ynab_updater.utils import (
     LEADING_PM_SIGNS_REGEXP,
     _cleanup_currency_value,
     _remove_plus_minus_signs_beginning,
+    format_currency,
     parse_currency_to_milliunits,
 )
 
@@ -171,3 +173,82 @@ def test_parse_currency_to_milliunits_invalid(caplog, input_str, expected_log):
     assert parse_currency_to_milliunits(input_str) is None
     # Check if the expected log message is present
     assert expected_log in caplog.text
+
+
+# --- Tests for parse_currency ---
+
+# Define some sample CurrencyFormat objects for testing
+USD_FORMAT = CurrencyFormat(
+    currency_symbol="$",
+    decimal_digits="2",
+    decimal_separator=".",
+    symbol_first=True,
+    group_separator=",",
+)
+
+EUR_FORMAT = CurrencyFormat(
+    currency_symbol="€",
+    decimal_digits="2",
+    decimal_separator=",",
+    symbol_first=False,
+    group_separator=".",
+)
+
+JPY_FORMAT = CurrencyFormat(
+    currency_symbol="¥",
+    decimal_digits="0",
+    decimal_separator=".",
+    symbol_first=True,
+    group_separator=",",
+)
+
+CUSTOM_FORMAT_SPACE_SEP = CurrencyFormat(
+    currency_symbol="¤",
+    decimal_digits="3",
+    decimal_separator=",",
+    symbol_first=False,
+    group_separator=" ",
+)
+
+
+@pytest.mark.parametrize(
+    "value, format_obj, expected_output",
+    [
+        # USD Format Tests
+        pytest.param(1234567, USD_FORMAT, "$1,234.57", id="usd_positive_rounding"),
+        pytest.param(-1234567, USD_FORMAT, "-$1,234.57", id="usd_negative_rounding"),
+        pytest.param(50000, USD_FORMAT, "$50.00", id="usd_positive_no_group"),
+        pytest.param(-50000, USD_FORMAT, "-$50.00", id="usd_negative_no_group"),
+        pytest.param(100, USD_FORMAT, "$0.10", id="usd_positive_small"),
+        pytest.param(-100, USD_FORMAT, "-$0.10", id="usd_negative_small"),
+        pytest.param(0, USD_FORMAT, "$0.00", id="usd_zero"),
+        pytest.param(1234000, USD_FORMAT, "$1,234.00", id="usd_exact_dollars"),
+        # EUR Format Tests
+        pytest.param(1234567, EUR_FORMAT, "1.234,57€", id="eur_positive_rounding"),
+        pytest.param(-1234567, EUR_FORMAT, "-1.234,57€", id="eur_negative_rounding"),
+        pytest.param(50000, EUR_FORMAT, "50,00€", id="eur_positive_no_group"),
+        pytest.param(-50000, EUR_FORMAT, "-50,00€", id="eur_negative_no_group"),
+        pytest.param(0, EUR_FORMAT, "0,00€", id="eur_zero"),
+        # JPY Format Tests (0 decimal digits)
+        pytest.param(1234567, JPY_FORMAT, "¥1,235", id="jpy_positive_rounding"),
+        pytest.param(-1234567, JPY_FORMAT, "-¥1,235", id="jpy_negative_rounding"),
+        pytest.param(50000, JPY_FORMAT, "¥50", id="jpy_positive_no_group"),
+        pytest.param(-50000, JPY_FORMAT, "-¥50", id="jpy_negative_no_group"),
+        pytest.param(100, JPY_FORMAT, "¥0", id="jpy_positive_small_rounds_to_zero"),  # 0.1 rounds to 0
+        pytest.param(-100, JPY_FORMAT, "¥0", id="jpy_negative_small_rounds_to_zero"),  # -0.1 rounds to 0
+        pytest.param(600, JPY_FORMAT, "¥1", id="jpy_positive_small_rounds_up"),  # 0.6 rounds to 1
+        pytest.param(-600, JPY_FORMAT, "-¥1", id="jpy_negative_small_rounds_down"),  # -0.6 rounds to -1
+        pytest.param(0, JPY_FORMAT, "¥0", id="jpy_zero"),
+        # Custom Format Tests (3 decimal places, space separator)
+        pytest.param(12345678, CUSTOM_FORMAT_SPACE_SEP, "12 345,678¤", id="custom_positive"),
+        pytest.param(-12345678, CUSTOM_FORMAT_SPACE_SEP, "-12 345,678¤", id="custom_negative"),
+        pytest.param(50123, CUSTOM_FORMAT_SPACE_SEP, "50,123¤", id="custom_positive_no_group"),
+        pytest.param(-50123, CUSTOM_FORMAT_SPACE_SEP, "-50,123¤", id="custom_negative_no_group"),
+        pytest.param(5, CUSTOM_FORMAT_SPACE_SEP, "0,005¤", id="custom_positive_small"),
+        pytest.param(-5, CUSTOM_FORMAT_SPACE_SEP, "-0,005¤", id="custom_negative_small"),
+        pytest.param(0, CUSTOM_FORMAT_SPACE_SEP, "0,000¤", id="custom_zero"),
+    ],
+)
+def test_parse_currency(value, format_obj, expected_output):
+    """Tests the parse_currency function with various formats and values."""
+    assert format_currency(value, format_obj) == expected_output

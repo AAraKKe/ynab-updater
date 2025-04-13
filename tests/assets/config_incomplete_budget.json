@@ -1,0 +1,16 @@
+{
+    "ynab_api_key": "mykey",
+    "budgets": [
+        {
+            "config": {
+                "id": "budget1",
+                "name": "Budget 1"
+                // Missing currency_format field
+            },
+            "selected": true
+        }
+    ],
+    "accounts": [],
+    "adjustment_memo": "Balance adjustment by YNAB Updater",
+    "adjustment_cleared_status": "cleared"
+}

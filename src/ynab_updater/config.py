@@ -1,100 +1,164 @@
 """Configuration management for YNAB Updater."""
 
-import json
+from __future__ import annotations
+
+from contextlib import suppress
+from enum import Enum
+from functools import cached_property
 from pathlib import Path
-from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_serializer
+from ynab.models import Account as YnabAccount
+from ynab.models import BudgetSummary as YnabBudget
 
-# Define the possible cleared statuses matching YNAB API
-ClearedStatus = Literal["cleared", "uncleared", "reconciled"]
+# Determine config path (~/.config/ynab-updater/config.json)
+CONFIG_FILE = Path.home() / ".config" / "ynab-updater" / "config.json"
+
+
+class ClearedStatus(Enum):
+    CLEARED = "cleared"
+    UNCLEARED = "uncleared"
+    RECONCILED = "reconciled"
+
+
+class ConfigError(Exception):
+    pass
 
 
 class AccountConfig(BaseModel):
-    """Configuration for a single YNAB account to track."""
+    id: str
+    name: str
 
-    id: str = Field(..., description="The YNAB account ID.")
-    name: str = Field(..., description="The name of the YNAB account.")
-    # Add any other necessary fields retrieved from YNAB API if needed later
-    # e.g., type, on_budget, etc.
+    model_config = ConfigDict(extra="ignore")
+
+    @staticmethod
+    def from_api(account: YnabAccount) -> AccountConfig:
+        return AccountConfig(**account.model_dump())
+
+
+class Account(BaseModel):
+    config: AccountConfig
+    selected: bool = False
+
+
+class CurrencyFormat(BaseModel):
+    decimal_digits: int
+    decimal_separator: str
+    group_separator: str
+    symbol_first: bool
+    currency_symbol: str
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class BudgetConfig(BaseModel):
+    id: str
+    name: str
+    currency_format: CurrencyFormat
+
+    model_config = ConfigDict(extra="ignore")
+
+    @staticmethod
+    def from_api(budget: YnabBudget) -> BudgetConfig:
+        return BudgetConfig(**budget.model_dump())
+
+
+class Budget(BaseModel):
+    config: BudgetConfig
+    selected: bool = False
 
 
 class AppConfig(BaseModel):
     """Main application configuration model."""
 
     ynab_api_key: SecretStr | None = None
-    selected_budget_id: str | None = None
-    selected_budget_name: str | None = None
-    selected_accounts: list[AccountConfig] = Field(default_factory=list)
+    budgets: list[Budget] = Field(default_factory=list)
+    accounts: list[Account] = Field(default_factory=list)
     # Add fields for currency format
-    currency_symbol: str | None = "$"  # Default to $ if not found
-    currency_decimal_digits: int = 2  # Default
-    currency_symbol_first: bool = True  # Default ($1.00 vs 1.00$)
     adjustment_memo: str = "Balance adjustment by YNAB Updater"
-    adjustment_cleared_status: ClearedStatus = "cleared"
+    adjustment_cleared_status: ClearedStatus = ClearedStatus.CLEARED
 
-    @field_validator("adjustment_cleared_status")
-    @classmethod
-    def check_cleared_status(cls, value: str) -> str:
-        if value in {"cleared", "uncleared", "reconciled"}:
-            return value
+    @field_serializer("ynab_api_key")
+    def serialize_key(self, ynab_api_key: SecretStr | None) -> str:
+        return "" if ynab_api_key is None else ynab_api_key.get_secret_value()
 
-        raise ValueError("Invalid cleared status. Must be 'cleared', 'uncleared', or 'reconciled'.")
+    @cached_property
+    def has_selected_budget(self) -> bool:
+        return len([b.config for b in self.budgets if b.selected]) != 0
+
+    @cached_property
+    def ynab_budgets(self) -> list[BudgetConfig]:
+        return [b.config for b in self.budgets]
+
+    @cached_property
+    def selected_budget(self) -> BudgetConfig:
+        selected_budgets = [b.config for b in self.budgets if b.selected]
+        match len(selected_budgets):
+            case 0:
+                raise ConfigError("No selected budgets")
+            case 1:
+                return next(b.config for b in self.budgets if b.selected)
+            case _:
+                raise ConfigError("Unexpected Error: More than 1 selected budgets")
+
+    @cached_property
+    def selected_accounts(self) -> list[AccountConfig]:
+        return [a.config for a in self.accounts if a.selected]
+
+    @staticmethod
+    def load(config_file=CONFIG_FILE) -> AppConfig:
+        _ensure_config_dir_exists(config_file.parent)
+        try:
+            if config_file.exists():
+                return AppConfig.model_validate_json(config_file.read_text())
+            return AppConfig()
+        except (FileNotFoundError, TypeError, ValueError) as e:
+            raise ConfigError(str(e)) from e
+
+    def save(self, config_file=CONFIG_FILE):
+        _ensure_config_dir_exists(config_file.parent)
+        config_file.write_text(self.model_dump_json())
+
+    def refresh(self):
+        """Saves and clears cached properties."""
+        self.save()
+        # Clear cached properties if they have been defined already
+        with suppress(AttributeError):
+            del self.selected_budget
+        with suppress(AttributeError):
+            del self.selected_accounts
+        with suppress(AttributeError):
+            del self.has_selected_budget
+
+    def add_budgets_from_api(self, budgets: list[YnabBudget]):
+        self.budgets = [Budget(config=BudgetConfig.from_api(budget), selected=False) for budget in budgets]
+
+    def add_accounts_from_api(self, accounts: list[YnabAccount]):
+        self.accounts = [Account(config=AccountConfig.from_api(account), selected=False) for account in accounts]
+
+    def budget_by_id(self, id: str) -> Budget:
+        selected = [b for b in self.budgets if b.config.id == id]
+
+        if not selected:
+            raise ValueError(f"There is no budget with id {id!r}")
+
+        if len(selected) > 1:
+            raise ValueError(f"More than one budgets found with id {id!r}")
+
+        return selected[0]
+
+    def account_by_id(self, id: str) -> Account:
+        selected = [a for a in self.accounts if a.config.id == id]
+
+        if not selected:
+            raise ValueError(f"There is no account with id {id!r}")
+
+        if len(selected) > 1:
+            raise ValueError(f"More than one account found with id {id!r}")
+
+        return selected[0]
 
 
-# Determine config path (~/.config/ynab-updater/config.json)
-CONFIG_DIR = Path.home() / ".config" / "ynab-updater"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-
-
-def ensure_config_dir_exists():
+def _ensure_config_dir_exists(config_dir: Path):
     """Creates the configuration directory if it doesn't exist."""
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def load_config() -> AppConfig:
-    """Loads the application configuration from the JSON file."""
-    ensure_config_dir_exists()
-    if not CONFIG_FILE.exists():
-        return AppConfig()  # Return default config if file doesn't exist
-    try:
-        with open(CONFIG_FILE) as f:
-            config_data = json.load(f)
-            # Handle SecretStr deserialization if needed
-            if "ynab_api_key" in config_data and config_data["ynab_api_key"]:
-                config_data["ynab_api_key"] = SecretStr(config_data["ynab_api_key"])
-            return AppConfig.model_validate(config_data)
-    except (json.JSONDecodeError, FileNotFoundError, TypeError, ValueError) as e:
-        # Handle potential errors during loading (e.g., corrupted file)
-        # Log this error appropriately later
-        print(f"Error loading config: {e}. Using default configuration.")
-        return AppConfig()
-
-
-def save_config(config: AppConfig):
-    """Saves the application configuration to the JSON file."""
-    ensure_config_dir_exists()
-    try:
-        # Handle SecretStr serialization
-        config_dict = config.model_dump()
-        # Check if api key exists before trying to get its secret value
-        if config.ynab_api_key is not None:
-            # Store the plain string in the JSON
-            config_dict["ynab_api_key"] = config.ynab_api_key.get_secret_value()
-        else:
-            config_dict["ynab_api_key"] = None  # Ensure it's explicitly null if not set
-
-        # Ensure new budget fields are included even if None
-        config_dict.setdefault("selected_budget_id", None)
-        config_dict.setdefault("selected_budget_name", None)
-        # Handle currency fields
-        config_dict.setdefault("currency_symbol", "$")
-        config_dict.setdefault("currency_decimal_digits", 2)
-        config_dict.setdefault("currency_symbol_first", True)
-
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(config_dict, f, indent=4)
-    except OSError as e:
-        # Handle potential errors during saving
-        # Log this error appropriately later
-        print(f"Error saving config: {e}")
+    config_dir.mkdir(parents=True, exist_ok=True)
