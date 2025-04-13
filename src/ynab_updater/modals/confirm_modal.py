@@ -6,7 +6,8 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
-from ..widgets import format_currency
+from ynab_updater.config import CurrencyFormat
+from ynab_updater.utils import format_currency
 
 
 class ConfirmModal(ModalScreen[bool]):
@@ -49,7 +50,7 @@ class ConfirmModal(ModalScreen[bool]):
 # --- Helper function to create confirmation prompt for bulk updates --- #
 
 
-def create_bulk_update_prompt(updates: list[tuple[str, str, int, int]]) -> Text:
+def create_bulk_update_prompt(updates: list[tuple[str, str, int, int]], format: CurrencyFormat) -> Text:
     """
     Generates a Rich Text prompt for the bulk update confirmation modal.
 
@@ -63,8 +64,8 @@ def create_bulk_update_prompt(updates: list[tuple[str, str, int, int]]) -> Text:
     prompt_text = Text("The following balance adjustments will be made:\n\n")
     for _, name, old_balance, adjustment in updates:
         new_balance = old_balance + adjustment
-        adjustment_str = format_currency(adjustment)
-        new_balance_str = format_currency(new_balance)
+        adjustment_str = format_currency(adjustment, format)
+        new_balance_str = format_currency(new_balance, format)
         # Add color to adjustment amount
         color = "green" if adjustment >= 0 else "red"
         prompt_text.append(f" • {name}: ")

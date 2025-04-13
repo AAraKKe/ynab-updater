@@ -526,7 +526,7 @@ class YnabUpdater(App[None]):
         # --- 2. Confirmation Modal --- #
         # Prepare data for the bulk prompt helper
         prompt_data = [(id, name, cur_bal, adj) for id, name, cur_bal, new_bal, adj in updates_to_make]
-        prompt_text = create_bulk_update_prompt(prompt_data)
+        prompt_text = create_bulk_update_prompt(prompt_data, self.config.selected_budget.currency_format)
 
         # Define the callback as an inner function
         async def handle_bulk_confirmation(confirmed: bool | None) -> None:
