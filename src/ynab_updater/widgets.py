@@ -12,45 +12,6 @@ from ynab_updater.utils import format_currency
 class AccountRow(Widget):
     """A widget to display information for a single YNAB account."""
 
-    DEFAULT_CSS = """
-    AccountRow {
-        layout: horizontal;
-        align: center middle;
-        padding: 1;
-        border: round $accent;
-        margin-bottom: 1;
-        height: auto; /* Let content plus child heights determine row height */
-        /* min-height: 5; <- Remove or comment out, let explicit heights work */
-    }
-    AccountRow > Static { /* General style for direct children if needed */
-        width: 1fr; /* Distribute space - maybe remove if specific widths below cover all */
-        margin-right: 2;
-        height: 3; /* Explicit height for alignment */
-    }
-    AccountRow > Input {
-        width: 15; /* Fixed width for balance input */
-        margin-right: 2;
-        height: 3; /* Explicit height for alignment */
-    }
-    AccountRow > Button {
-        width: 12; /* Fixed width for button */
-        margin-right: 1;
-        min-width: 12;
-        height: 3; /* Explicit height for alignment */
-    }
-    AccountRow > Label {
-        width: 25; /* Width for account name */
-        content-align: left middle;
-        margin-right: 2;
-        height: 3; /* Explicit height for alignment */
-    }
-    AccountRow > .balance-label {
-        width: 15; /* Width for current balance */
-        content-align: right middle;
-        /* height: 3; <- Inherited from AccountRow > Label */
-    }
-    """
-
     class BalanceUpdate(Message):
         """Message sent when the update button for this account is pressed."""
 

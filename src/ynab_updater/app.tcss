@@ -129,11 +129,6 @@ Footer {
     margin: 0 1;
 }
 
-/* Style for AccountRow defined in widgets.py */
-AccountRow {
-    /* Styles moved to widgets.py */
-}
-
 #account-list {
     column-span: 2;
     border: round $accent-lighten-1;
@@ -147,4 +142,72 @@ AccountRow {
      column-span: 2;
      align: center middle;
      height: auto;
+}
+
+
+
+/* --- Account Row Styling --- */
+AccountRow {
+    layout: horizontal;
+    align: center middle;
+    padding: 1;
+    border: round $accent;
+    margin-bottom: 1;
+    height: auto;
+}
+AccountRow > Static {
+    width: 1fr;
+    margin-right: 2;
+    height: 3;
+}
+AccountRow > Input {
+    width: 15;
+    margin-right: 2;
+    height: 3;
+}
+AccountRow > Button {
+    width: 12;
+    margin-right: 1;
+    min-width: 12;
+    height: 3;
+}
+AccountRow > Label {
+    width: 25;
+    content-align: left middle;
+    margin-right: 2;
+    height: 3;
+}
+AccountRow > .balance-label {
+    width: 15;
+    content-align: right middle;
+}
+
+/* Configuration Screen */
+ConfigScreen #config-form {
+    padding: 1 2;
+    align: center middle;
+    border: round $accent;
+}
+
+ConfigScreen .config-container {
+    border: round $accent;
+    padding: 1;
+    layout: vertical;
+    height: auto;
+}
+
+ConfigScreen #accounts-grid.two-cols {
+    grid-size: 2;
+    column-span: 1;
+    margin-top: 1;
+}
+
+ConfigScreen .button-container {
+    height: auto;
+    align: center middle;
+    padding-top: 1;
+}
+
+ConfigScreen .button-container Button {
+    margin: 0 1;
 }

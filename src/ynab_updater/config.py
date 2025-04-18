@@ -8,8 +8,8 @@ from functools import cached_property
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_serializer
-from ynab.models import Account as YnabAccount
-from ynab.models import BudgetSummary as YnabBudget
+from ynab.models.account import Account as YnabAccount
+from ynab.models.budget_summary import BudgetSummary as YnabBudget
 
 # Determine config path (~/.config/ynab-updater/config.json)
 CONFIG_FILE = Path.home() / ".config" / "ynab-updater" / "config.json"

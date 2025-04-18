@@ -194,7 +194,9 @@ class YnabUpdater(App[None]):
             if selected_budget.accounts is not None:
                 if not selected_budget.accounts:
                     self.notify(f"The budget {selected_budget.name!r} has no accounts", severity="error")
-                self.config.add_accounts_from_api(selected_budget.accounts)
+                self.config.add_accounts_from_api(
+                    [account for account in selected_budget.accounts if not account.closed]
+                )
 
             self.config.refresh()
             self.notify(f"Budget '{selected_budget.name}' selected.", severity="information")
@@ -366,7 +368,7 @@ class YnabUpdater(App[None]):
     @on(Button.Pressed, "#config")
     def on_config_button_pressed(self):
         """Handle Config button press."""
-        self.push_screen(ConfigScreen())
+        self.push_screen(ConfigScreen(self.config))
 
     @on(Button.Pressed, "#refresh-balances")
     async def on_refresh_button_pressed(self):
@@ -589,3 +591,8 @@ class YnabUpdater(App[None]):
         await self.push_screen(
             ConfirmModal("Confirm Bulk Balance Adjustments", prompt_text), callback=handle_bulk_confirmation
         )
+
+    @on(ConfigScreen.ConfigSaved)
+    async def on_config_saved(self):
+        """Handle the ConfigSaved message."""
+        await self.load_budget_and_accounts()

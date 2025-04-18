@@ -80,7 +80,7 @@ class YnabHandler:
         client_api = accounts_api.AccountsApi(self._client)
         try:
             response = client_api.get_accounts(budget_id)
-            return response.data.accounts
+            return [account for account in response.data.accounts if not account.closed]
         except ApiException as e:
             logger.error(f"YNAB API error fetching accounts for budget {budget_id}: {e}")
             raise YNABClientError(f"Failed to fetch accounts: {e}") from e
@@ -164,7 +164,7 @@ class YnabHandler:
                     account_id=str(tx_data["account_id"]),
                     date=date.today(),
                     amount=int(tx_data["amount"]),
-                    cleared=self._get_cleared_enum(str(tx_data["cleared"])),
+                    cleared=self._get_cleared_enum(str(tx_data["cleared"])).value,
                     payee_name=str(tx_data.get("payee_name", "Balance Adjustment")),
                     memo=str(tx_data.get("memo")) if tx_data.get("memo") else None,
                     approved=bool(tx_data.get("approved", True)),

@@ -1,9 +1,9 @@
 """Modal for selecting a YNAB budget."""
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label, RadioButton, RadioSet, TextArea
+from textual.widgets import Button, Label, Select, Static
 
 from ..ynab_client import BudgetSummary
 from .utils import _extract_base_id, _generate_widget_id
@@ -23,32 +23,31 @@ class BudgetSelectModal(ModalScreen[BudgetSummary | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="budget-select-dialog", classes="modal-dialog"):
             yield Label("Select YNAB Budget", id="budget-select-title")
-            yield TextArea("These are the budgets present in your YNAB account.")
-            with VerticalScroll(id="budget-list"):
-                with RadioSet(id="budget-radio-set"):
-                    for i, budget in enumerate(self.sorted_budgets):
-                        # Use helper to generate ID
-                        widget_id = _generate_widget_id("budget", budget.id)
-                        yield RadioButton(
-                            budget.name,
-                            id=widget_id,
-                            value=(i == 0),  # Select first one initially
-                        )
+            yield Static("Select the budget you want to use for balance updates.")
+
+            # Create a list of (value, label) tuples for the Select widget
+            # Using the widget ID generator to maintain consistent ID format
+            budget_options = [(budget.name, _generate_widget_id("budget", budget.id)) for budget in self.sorted_budgets]
+
+            # For Select widget, don't set initial value - let it be auto-selected
+            yield Select(options=budget_options, id="budget-select")
+
             with Horizontal(id="budget-select-buttons", classes="modal-buttons"):
                 yield Button("Cancel", variant="default", id="cancel-selection")
                 yield Button("Select Budget", variant="primary", id="select-budget")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "select-budget":
-            radio_set = self.query_one(RadioSet)
-            if radio_set.pressed_button and radio_set.pressed_button.id:
-                if selected_id := _extract_base_id("budget", radio_set.pressed_button.id):
+            select = self.query_one(Select)
+            if select.value is not None and str(select.value):
+                # Extract the base ID using the utility function
+                if selected_id := _extract_base_id("budget", str(select.value)):
                     # Find the full budget data using the dictionary
                     selected_budget = self.budgets_by_id.get(selected_id)
                     self.dismiss(selected_budget)
                 else:
                     # Log error if ID extraction failed
-                    self.log.error(f"Could not extract budget ID from radio button ID: {radio_set.pressed_button.id}")
+                    self.log.error(f"Could not extract budget ID from select value: {select.value}")
                     self.notify("Internal error selecting budget.", severity="error")
             else:
                 self.notify("Please select a budget.", severity="warning")
