@@ -164,7 +164,7 @@ class YnabHandler:
                     account_id=str(tx_data["account_id"]),
                     date=date.today(),
                     amount=int(tx_data["amount"]),
-                    cleared=self._get_cleared_enum(str(tx_data["cleared"])).value,
+                    cleared=self._get_cleared_enum(str(tx_data["cleared"])),
                     payee_name=str(tx_data.get("payee_name", "Balance Adjustment")),
                     memo=str(tx_data.get("memo")) if tx_data.get("memo") else None,
                     approved=bool(tx_data.get("approved", True)),
