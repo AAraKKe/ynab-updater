@@ -1,6 +1,7 @@
 """Main application screen and configuration screen."""
 
 from collections.abc import Callable
+import logging
 
 from pydantic import SecretStr
 from rich.text import Text
@@ -115,7 +116,7 @@ class YnabUpdater(App[None]):
 
         if self.config.ynab_api_key:
             try:
-                self.ynab_handler = YnabHandler(self.config.ynab_api_key)
+                self.ynab_handler = YnabHandler(self.config.ynab_api_key, logger=self.log)
                 self.log.info("YnabHandler initialized.")
                 return True
             except ValueError as e:
@@ -448,7 +449,7 @@ class YnabUpdater(App[None]):
                         self.config.selected_budget.id,
                         account_id,
                         adjustment_amount,
-                        self.config.adjustment_cleared_status.value,
+                        self.config.adjustment_cleared_status,
                         self.config.adjustment_memo,
                     )
 
