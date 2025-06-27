@@ -17,22 +17,18 @@ class AccountSelectModal(ModalScreen[list[Account]]):
     def __init__(
         self,
         available_accounts: list[Account],
-        previously_selected_ids: list[str],
     ):
         super().__init__()
         self.available_accounts = sorted(available_accounts, key=lambda acc: acc.config.name)  # Sort accounts by name
-        self.previously_selected_ids = set(previously_selected_ids)
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal-dialog"):
             yield Label("Select Accounts to Track")
             with VerticalScroll(id="account-list"):
                 for account in self.available_accounts:
-                    # Pre-check if the account was previously selected
-                    is_checked = account.config.id in self.previously_selected_ids
                     # Use helper to generate ID
                     widget_id = _generate_widget_id("acc", account.config.id)
-                    yield Checkbox(account.config.name, value=is_checked, id=widget_id)
+                    yield Checkbox(account.config.name, id=widget_id)
             with Horizontal(classes="modal-buttons"):
                 yield Button("Save Selection", variant="primary", id="save-selection")
                 yield Button("Cancel", variant="default", id="cancel-selection")

@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
-from textual.containers import Container, Grid, Horizontal, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
 from textual.message import Message
 from textual.screen import Screen
-from textual.widgets import Button, Checkbox, Footer, Header, Input, Label, Select, Static
+from textual.widgets import Button, Checkbox, Collapsible, Footer, Header, Input, Label, Select
 
 from ..config import ClearedStatus
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ynab_updater.config import AppConfig
 
 
-class ConfigScreen(Screen[None]):
+class ConfigScreen(Screen[bool]):
     """Screen for configuring application settings."""
 
     class ConfigSaved(Message):
@@ -30,7 +30,11 @@ class ConfigScreen(Screen[None]):
     ]
 
     def __init__(
-        self, config: AppConfig, name: str | None = None, id: str | None = None, classes: str | None = None
+        self,
+        config: AppConfig,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
     ) -> None:
         super().__init__(name, id, classes)
         self.config = config
@@ -38,40 +42,46 @@ class ConfigScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         """Create child widgets for the screen."""
         yield Header()
-        yield Static("Configure YnabUpdater")
-        with VerticalScroll(id="config-form"):
-            with Container(classes="config-container"):
-                yield Label("[bold]Adjustment Memo[/bold]: this is the memo added to the adjustment transaction")
-                yield Input(
-                    value=self.config.adjustment_memo,
-                    placeholder=self.config.adjustment_memo,
-                    id="adjustment-memo",
-                )
-
-            with Container(classes="config-container"):
-                yield Label(
-                    "[bold]Adjustment Cleared Status[/bold]: this is the cleared status to be used for "
-                    "the adjustment transactions"
-                )
-                yield Select(
-                    options=[(status.value.title(), status) for status in ClearedStatus],
-                    value=self.config.adjustment_cleared_status,
-                    id="adjustment-cleared-status",
-                )
-
-            with VerticalScroll(classes="config-container"):
-                yield Label("[bold]Selected Accounts[/bold]")
-                with Grid(id="accounts-grid", classes="two-cols"):
-                    for account in self.config.accounts:
-                        yield Checkbox(
-                            account.config.name,
-                            value=account.selected,
-                            id=f"account-{account.config.id}",
+        with Vertical(id="main-config-container"):
+            with Collapsible(title="Updater Configuration", classes="config-collapsible", collapsed=False):
+                with VerticalScroll(id="config-form"):
+                    with Container(classes="config-container"):
+                        yield Label(
+                            "[bold]Adjustment Memo[/bold]: this is the memo added to the adjustment transaction"
+                        )
+                        yield Input(
+                            value=self.config.adjustment_memo,
+                            placeholder=self.config.adjustment_memo,
+                            id="adjustment-memo",
                         )
 
-        with Horizontal(classes="modal-buttons"):
-            yield Button("Cancel", id="cancel")
-            yield Button("Save", id="save", variant="primary")
+                    with Container(classes="config-container"):
+                        yield Label(
+                            "[bold]Adjustment Cleared Status[/bold]: this is the cleared status to be used for "
+                            "the adjustment transactions"
+                        )
+                        yield Select(
+                            options=[(status.value.title(), status) for status in ClearedStatus],
+                            value=self.config.adjustment_cleared_status,
+                            id="adjustment-cleared-status",
+                        )
+
+                    with VerticalScroll(classes="config-container"):
+                        yield Label("[bold]Selected Accounts[/bold]")
+                        with Grid(id="accounts-grid"):
+                            for account in self.config.accounts:
+                                yield Checkbox(
+                                    account.config.name,
+                                    value=account.selected,
+                                    id=f"account-{account.config.id}",
+                                )
+
+            with Collapsible(title="Net Worth", classes="config-collapsible"):
+                pass
+
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
 
         yield Footer()
 
@@ -89,7 +99,7 @@ class ConfigScreen(Screen[None]):
 
     def action_back(self) -> None:
         """Called when the Cancel button is pressed or escape is hit."""
-        self.app.pop_screen()
+        self.dismiss(False)
 
     def action_save(self) -> None:
         """Called when the Save button is pressed."""
@@ -102,13 +112,15 @@ class ConfigScreen(Screen[None]):
         else:
             self.config.adjustment_cleared_status = ClearedStatus.CLEARED
 
+        needs_refresh = False
         # Update selected accounts
         for account in self.config.accounts:
             checkbox = self.query_one(f"#account-{account.config.id}", Checkbox)
+            if account.selected != checkbox.value:
+                needs_refresh = True
             account.selected = checkbox.value
 
         # Save and refresh config
         self.config.refresh()
-        self.app.pop_screen()
         self.app.notify("Configuration saved.")
-        self.post_message(ConfigScreen.ConfigSaved())
+        self.dismiss(needs_refresh)

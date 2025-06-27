@@ -6,7 +6,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Input, Label
 
 from ynab_updater.config import CurrencyFormat
-from ynab_updater.utils import format_currency
+from ynab_updater.utils import format_balance
 
 
 class AccountRow(Widget):
@@ -30,7 +30,7 @@ class AccountRow(Widget):
         self.format = format
 
         self._name_label = Label(account_name)
-        self._balance_label = Label(format_currency(current_balance, format), classes="balance-label")
+        self._balance_label = Label(format_balance(current_balance, format), classes="balance-label")
         self._balance_input = Input(placeholder="New Balance (e.g., 123.45)")
         self._update_button = Button("Update", variant="success", id=f"update-{account_id}")
 
@@ -51,7 +51,7 @@ class AccountRow(Widget):
     def update_balance(self, new_balance_milliunits: int) -> None:
         """Updates the displayed current balance."""
         self.current_balance_milliunits = new_balance_milliunits
-        self._balance_label.update(format_currency(new_balance_milliunits, self.format))
+        self._balance_label.update(format_balance(new_balance_milliunits, self.format))
 
     @property
     def new_balance_input_value(self) -> str:

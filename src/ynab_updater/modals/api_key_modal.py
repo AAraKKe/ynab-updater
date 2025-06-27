@@ -34,7 +34,7 @@ class APIKeyModal(ModalScreen[str]):
             else:
                 self.app.notify("API Key cannot be empty.", severity="error", timeout=3)
         elif event.button.id == "cancel-key":
-            self.dismiss("")  # Return empty string on cancel
+            self.dismiss(None)
 
     def action_cancel(self):
         """Called when escape is pressed."""

@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_serializer
 from ynab.models.account import Account as YnabAccount
 from ynab.models.budget_summary import BudgetSummary as YnabBudget
 
+from ynab_updater.constats import DEFAULT_ADJUSTMENT_MEMO
+
 # Determine config path (~/.config/ynab-updater/config.json)
 CONFIG_FILE = Path.home() / ".config" / "ynab-updater" / "config.json"
 
@@ -75,7 +77,7 @@ class AppConfig(BaseModel):
     budgets: list[Budget] = Field(default_factory=list)
     accounts: list[Account] = Field(default_factory=list)
     # Add fields for currency format
-    adjustment_memo: str = "Balance adjustment by YNAB Updater"
+    adjustment_memo: str = DEFAULT_ADJUSTMENT_MEMO
     adjustment_cleared_status: ClearedStatus = ClearedStatus.CLEARED
 
     @field_serializer("ynab_api_key")
@@ -105,6 +107,10 @@ class AppConfig(BaseModel):
     def selected_accounts(self) -> list[AccountConfig]:
         return [a.config for a in self.accounts if a.selected]
 
+    @cached_property
+    def has_selected_accounts(self) -> bool:
+        return len(self.selected_accounts) > 0
+
     @staticmethod
     def load(config_file=CONFIG_FILE) -> AppConfig:
         _ensure_config_dir_exists(config_file.parent)
@@ -114,6 +120,10 @@ class AppConfig(BaseModel):
             return AppConfig()
         except (FileNotFoundError, TypeError, ValueError) as e:
             raise ConfigError(str(e)) from e
+
+    def is_valid(self) -> bool:
+        """Returns true if we have a valid api key and Budget"""
+        return self.ynab_api_key is not None and self.has_selected_budget
 
     def save(self, config_file=CONFIG_FILE):
         _ensure_config_dir_exists(config_file.parent)
@@ -134,7 +144,13 @@ class AppConfig(BaseModel):
         self.budgets = [Budget(config=BudgetConfig.from_api(budget), selected=False) for budget in budgets]
 
     def add_accounts_from_api(self, accounts: list[YnabAccount]):
-        self.accounts = [Account(config=AccountConfig.from_api(account), selected=False) for account in accounts]
+        ids = {acc.config.id for acc in self.accounts}
+
+        for account in accounts:
+            if account.id in ids:
+                continue
+
+            self.accounts.append(Account(config=AccountConfig.from_api(account), selected=False))
 
     def budget_by_id(self, id: str) -> Budget:
         selected = [b for b in self.budgets if b.config.id == id]
