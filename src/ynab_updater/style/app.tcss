@@ -13,9 +13,9 @@ Footer {
     color: $text-muted;
 }
 
-#main-container {
+MainView {
     padding: 1 2;
-    grid-size: 2;
+    grid-size: 2 2;
     grid-gutter: 1 2;
     grid-rows: auto 1fr auto; /* Title, scrollable list, button bar */
 }
@@ -27,7 +27,14 @@ Footer {
     margin-bottom: 1;
 }
 
-#loading-indicator {
+#net-worth-title {
+    column-span: 2;
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+LoadingIndicator {
     column-span: 2;
     width: 100%;
     height: 1; /* Take up minimal space when hidden */
@@ -37,11 +44,21 @@ Footer {
     margin-bottom: 1;
 }
 
-#accounts-list-container {
+Accounts {
+    border: round $accent;
+    padding: 1;
+}
+
+NetWorth {
+    border: round $accent;
+    padding: 1;
+}
+
+#net-worth {
     column-span: 2;
     border: round $accent;
     padding: 1;
-    width: 100%;
+    width: 50%;
     /* VerticalScroll handles overflow */
 }
 
@@ -129,12 +146,12 @@ Footer {
     margin: 0 1;
 }
 
-#account-list {
-    column-span: 2;
+AccountRow {
+    layout: horizontal;
+    overflow-x: auto;
     border: round $accent-lighten-1;
-    height: 30;
     margin-bottom: 1;
-    padding: 1;
+    padding: 1 1;
 }
 
 
@@ -143,8 +160,6 @@ Footer {
      align: center middle;
      height: auto;
 }
-
-
 
 /* --- Account Row Styling --- */
 AccountRow {
@@ -185,7 +200,7 @@ AccountRow > .balance-label {
 /* Configuration Screen */
 ConfigScreen #config-form {
     padding: 1 2;
-    align: center middle;
+    align: center top;
     border: round $accent;
 }
 
@@ -196,10 +211,11 @@ ConfigScreen .config-container {
     height: auto;
 }
 
-ConfigScreen #accounts-grid.two-cols {
-    grid-size: 2;
+ConfigScreen #accounts-grid {
+    grid-size: 3;
     column-span: 1;
     margin-top: 1;
+    height: auto;
 }
 
 ConfigScreen .button-container {
@@ -210,4 +226,8 @@ ConfigScreen .button-container {
 
 ConfigScreen .button-container Button {
     margin: 0 1;
+}
+
+ConfigScreen Checkbox {
+    height: 3;
 }

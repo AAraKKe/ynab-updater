@@ -6,7 +6,7 @@ from src.ynab_updater.utils import (
     LEADING_PM_SIGNS_REGEXP,
     _cleanup_currency_value,
     _remove_plus_minus_signs_beginning,
-    format_currency,
+    format_balance,
     parse_currency_to_milliunits,
 )
 
@@ -251,4 +251,4 @@ CUSTOM_FORMAT_SPACE_SEP = CurrencyFormat(
 )
 def test_parse_currency(value, format_obj, expected_output):
     """Tests the parse_currency function with various formats and values."""
-    assert format_currency(value, format_obj) == expected_output
+    assert format_balance(value, format_obj) == expected_output

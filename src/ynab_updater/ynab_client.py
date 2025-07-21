@@ -1,11 +1,11 @@
 """Client for interacting with the YNAB API using the official SDK."""
 
 from dataclasses import dataclass
-import logging
 from datetime import date
-from typing import Any, TypedDict, assert_never
+from typing import TypedDict, assert_never
 
 from pydantic import SecretStr
+from textual import Logger
 from ynab.api import accounts_api, budgets_api, transactions_api
 from ynab.api_client import ApiClient
 from ynab.configuration import Configuration
@@ -19,7 +19,8 @@ from ynab.models.save_transactions_response_data import SaveTransactionsResponse
 from ynab.models.transaction_cleared_status import TransactionClearedStatus
 from ynab.models.transaction_detail import TransactionDetail
 
-from ynab_updater.config import ClearedStatus
+from ynab_updater.config import AppConfig, ClearedStatus
+from ynab_updater.constats import DEFAULT_ADJUSTMENT_MEMO, DEFAULT_PAYEE_NAME
 
 
 # Define custom exception for easier handling upstream
@@ -74,7 +75,7 @@ class NetWorthResult:
 class YnabHandler:
     """Handles interactions with the YNAB API using the official SDK."""
 
-    def __init__(self, api_key: SecretStr, logger: logging.Logger):
+    def __init__(self, api_key: SecretStr, logger: Logger):
         """Initializes the handler with the API key and creates an API client."""
         if not api_key:
             raise ValueError("API key cannot be empty for YnabHandler.")
@@ -132,6 +133,7 @@ class YnabHandler:
 
     def get_account_by_id(self, budget_id: str, account_id: str) -> Account | None:
         """Fetches details for a specific account using the YNAB SDK."""
+        self.logger.debug(f"Getting account with id: {account_id}")
         client_api = accounts_api.AccountsApi(self._client)
         try:
             response = client_api.get_account_by_id(budget_id, account_id)
@@ -191,40 +193,19 @@ class YnabHandler:
     def create_transactions(
         self,
         budget_id: str,
-        transactions_data: list[dict[str, Any]],
+        transactions: list[NewTransaction],
     ) -> SaveTransactionsResponseData:
         """Creates multiple transactions in bulk using the YNAB SDK's create_transaction method."""
         client_api = transactions_api.TransactionsApi(self._client)
 
-        new_transactions_list: list[NewTransaction] = []
-        for tx_data in transactions_data:
-            self.logger.warning(tx_data)
-            try:
-                if any(k not in tx_data for k in ("account_id", "amount", "cleared")):
-                    raise ValueError("Missing required keys in transaction data")
-
-                new_tx = NewTransaction(
-                    account_id=str(tx_data["account_id"]),
-                    date=date.today(),
-                    amount=int(tx_data["amount"]),
-                    cleared=self._get_cleared_enum(tx_data["cleared"]),
-                    payee_name=str(tx_data.get("payee_name", "Balance Adjustment")),
-                    memo=str(tx_data.get("memo")) if tx_data.get("memo") else None,
-                    approved=bool(tx_data.get("approved", True)),
-                )
-                new_transactions_list.append(new_tx)
-            except (KeyError, ValueError, TypeError) as e:
-                self.logger.error(f"Error processing transaction data for bulk import: {tx_data}. Error: {e}")
-                raise YNABClientError(f"Invalid transaction data provided for bulk import: {e}") from e
-
-        if not new_transactions_list:
+        if not transactions:
             self.logger.warning("No valid transactions provided for bulk creation.")
             raise YNABClientError("No valid transactions to create.")
 
-        bulk_payload = PostTransactionsWrapper(transactions=new_transactions_list)
+        bulk_payload = PostTransactionsWrapper(transactions=transactions)
 
         try:
-            self.logger.info(f"Creating {len(new_transactions_list)} bulk adjustment transactions.")
+            self.logger.info(f"Creating {len(transactions)} bulk adjustment transactions.")
             response: SaveTransactionsResponse = client_api.create_transaction(budget_id, bulk_payload)
 
             if response.data:
@@ -242,5 +223,47 @@ class YnabHandler:
             self.logger.error(f"Unexpected error creating bulk transactions: {e}")
             raise YNABClientError(f"An unexpected error occurred: {e}") from e
 
-    def net_worth(self) -> NetWorthResult:
-        accounts = self.get_accounts()
+    def build_transaction(
+        self,
+        account_id: str,
+        amount: int,
+        cleared_status: ClearedStatus,
+        payee_name: str | None = None,
+        memo: str | None = None,
+    ) -> NewTransaction:
+        return NewTransaction(
+            account_id=account_id,
+            date=date.today(),
+            amount=amount,
+            cleared=self._get_cleared_enum(cleared_status),
+            payee_name=payee_name or DEFAULT_PAYEE_NAME,
+            memo=memo or DEFAULT_ADJUSTMENT_MEMO,
+            approved=True,
+        )
+
+    # def net_worth(self) -> NetWorthResult:
+    #     accounts = self.get_accounts()
+
+
+client: YnabHandler | None = None
+
+
+def set(api_key: str | SecretStr, logger: Logger) -> YnabHandler:
+    global client
+    if isinstance(api_key, str):
+        api_key = SecretStr(api_key)
+    client = YnabHandler(api_key=api_key, logger=logger)
+    return client
+
+
+def get() -> YnabHandler:
+    global client
+    if client is None:
+        # Try loading from config
+        config = AppConfig.load()
+        print(config)
+        if (api_key := config.ynab_api_key) is not None:
+            client = YnabHandler(api_key=api_key, logger=Logger(None))
+            return client
+        raise YNABClientError("Handler accessed before definition")
+    return client

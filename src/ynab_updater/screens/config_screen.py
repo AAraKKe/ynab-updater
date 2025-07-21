@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ynab_updater.config import AppConfig
 
 
-class ConfigScreen(Screen[None]):
+class ConfigScreen(Screen[bool]):
     """Screen for configuring application settings."""
 
     class ConfigSaved(Message):
@@ -30,7 +30,11 @@ class ConfigScreen(Screen[None]):
     ]
 
     def __init__(
-        self, config: AppConfig, name: str | None = None, id: str | None = None, classes: str | None = None
+        self,
+        config: AppConfig,
+        name: str | None = None,
+        id: str | None = None,
+        classes: str | None = None,
     ) -> None:
         super().__init__(name, id, classes)
         self.config = config
@@ -61,7 +65,7 @@ class ConfigScreen(Screen[None]):
 
             with VerticalScroll(classes="config-container"):
                 yield Label("[bold]Selected Accounts[/bold]")
-                with Grid(id="accounts-grid", classes="two-cols"):
+                with Grid(id="accounts-grid"):
                     for account in self.config.accounts:
                         yield Checkbox(
                             account.config.name,
@@ -89,7 +93,7 @@ class ConfigScreen(Screen[None]):
 
     def action_back(self) -> None:
         """Called when the Cancel button is pressed or escape is hit."""
-        self.app.pop_screen()
+        self.dismiss(False)
 
     def action_save(self) -> None:
         """Called when the Save button is pressed."""
@@ -102,13 +106,15 @@ class ConfigScreen(Screen[None]):
         else:
             self.config.adjustment_cleared_status = ClearedStatus.CLEARED
 
+        needs_refresh = False
         # Update selected accounts
         for account in self.config.accounts:
             checkbox = self.query_one(f"#account-{account.config.id}", Checkbox)
+            if account.selected != checkbox.value:
+                needs_refresh = True
             account.selected = checkbox.value
 
         # Save and refresh config
         self.config.refresh()
-        self.app.pop_screen()
         self.app.notify("Configuration saved.")
-        self.post_message(ConfigScreen.ConfigSaved())
+        self.dismiss(needs_refresh)
