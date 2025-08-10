@@ -9,7 +9,6 @@ from textual.widgets import Button
 
 from ynab_updater.config import AppConfig
 from ynab_updater.modals import ConfirmModal
-from ynab_updater.screens import ConfigScreen
 from ynab_updater.utils import bulk_update_balance_text
 from ynab_updater.ynab_client import get
 
@@ -19,12 +18,15 @@ from .net_worth import NetWorth
 if TYPE_CHECKING:
     from ynab.models.new_transaction import NewTransaction
 
+    from ynab_updater.screens.config_screen import ConfigScreen
+
     from .account_row import AccountUpdate
 
 
 class MainView(Container):
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, config_screen: ConfigScreen):
         self.config = config
+        self.config_screen = config_screen
         super().__init__()
 
     def compose(self) -> ComposeResult:
@@ -64,8 +66,9 @@ class MainView(Container):
             if saved:
                 accounts = self.query_one(Accounts)
                 await accounts.refresh_accounts()
+                self.query_one(NetWorth).update_networth()
 
-        self.app.push_screen(ConfigScreen(self.config), reload_view)
+        self.app.push_screen(self.config_screen, reload_view)
         event.stop()
 
     @on(Button.Pressed, "#update-all")
@@ -122,4 +125,4 @@ class MainView(Container):
     def on_net_worth_data_loaded(self, event: NetWorth.DataLoaded):
         net_worth = self.query_one(NetWorth)
         net_worth.networth.update(event.networth_data)
-        net_worth.total_net_worth = event.networth_data.net_wroth()
+        net_worth.total_net_worth = event.networth_data.net_worth()

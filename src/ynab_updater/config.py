@@ -6,15 +6,48 @@ from contextlib import suppress
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
+from typing import Self, assert_never
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_serializer, model_validator
 from ynab.models.account import Account as YnabAccount
+from ynab.models.account_type import AccountType
 from ynab.models.budget_summary import BudgetSummary as YnabBudget
 
 from ynab_updater.constats import DEFAULT_ADJUSTMENT_MEMO
 
 # Determine config path (~/.config/ynab-updater/config.json)
 CONFIG_FILE = Path.home() / ".config" / "ynab-updater" / "config.json"
+
+
+class NetworthType(Enum):
+    CASH = "Cash"
+    SAVINGS = "Savings"
+    DEBT = "Debt"
+    ASSETS = "Assets"
+
+    @staticmethod
+    def from_account_type(account_type: AccountType) -> NetworthType:
+        match account_type:
+            case AccountType.CASH | AccountType.CHECKING:
+                return NetworthType.CASH
+            case AccountType.SAVINGS:
+                return NetworthType.SAVINGS
+            case (
+                AccountType.CREDITCARD
+                | AccountType.LINEOFCREDIT
+                | AccountType.OTHERLIABILITY
+                | AccountType.MORTGAGE
+                | AccountType.AUTOLOAN
+                | AccountType.STUDENTLOAN
+                | AccountType.PERSONALLOAN
+                | AccountType.MEDICALDEBT
+                | AccountType.OTHERDEBT
+            ):
+                return NetworthType.DEBT
+            case AccountType.OTHERASSET:
+                return NetworthType.ASSETS
+            case never:
+                assert_never(never)
 
 
 class ClearedStatus(Enum):
@@ -30,12 +63,13 @@ class ConfigError(Exception):
 class AccountConfig(BaseModel):
     id: str
     name: str
-
+    networth_type: NetworthType = NetworthType.CASH  # Default to cash and refresh on startup
     model_config = ConfigDict(extra="ignore")
 
     @staticmethod
     def from_api(account: YnabAccount) -> AccountConfig:
-        return AccountConfig(**account.model_dump())
+        networth_type = NetworthType.from_account_type(account_type=account.type)
+        return AccountConfig(**account.model_dump(), networth_type=networth_type)
 
 
 class Account(BaseModel):
@@ -70,6 +104,15 @@ class Budget(BaseModel):
     selected: bool = False
 
 
+class DebtAccountMapping(BaseModel):
+    debt_account_id: str
+    mapping_accounts: list[str]
+
+
+class NetWorthConfig(BaseModel):
+    debt_assingmet: list[DebtAccountMapping]
+
+
 class AppConfig(BaseModel):
     """Main application configuration model."""
 
@@ -79,6 +122,17 @@ class AppConfig(BaseModel):
     # Add fields for currency format
     adjustment_memo: str = DEFAULT_ADJUSTMENT_MEMO
     adjustment_cleared_status: ClearedStatus = ClearedStatus.CLEARED
+    networth_config: NetWorthConfig = NetWorthConfig(debt_assingmet=[])
+
+    @model_validator(mode="after")
+    def fill_networth_config(self) -> Self:
+        _asignment_ids = {debt.debt_account_id: debt for debt in self.networth_config.debt_assingmet}
+        for account in self.accounts:
+            if account.config.id not in _asignment_ids and account.config.networth_type is NetworthType.DEBT:
+                self.networth_config.debt_assingmet.append(
+                    DebtAccountMapping(debt_account_id=account.config.id, mapping_accounts=[])
+                )
+        return self
 
     @field_serializer("ynab_api_key")
     def serialize_key(self, ynab_api_key: SecretStr | None) -> str:
@@ -131,6 +185,8 @@ class AppConfig(BaseModel):
 
     def refresh(self):
         """Saves and clears cached properties."""
+        # Reload the config to ensure any validator runs over the new data
+        self.__init__(**self.model_dump())
         self.save()
         # Clear cached properties if they have been defined already
         with suppress(AttributeError):
@@ -144,13 +200,14 @@ class AppConfig(BaseModel):
         self.budgets = [Budget(config=BudgetConfig.from_api(budget), selected=False) for budget in budgets]
 
     def add_accounts_from_api(self, accounts: list[YnabAccount]):
-        ids = {acc.config.id for acc in self.accounts}
+        ids = {acc.config.id: acc for acc in self.accounts}
 
+        _accounts: list[Account] = []
         for account in accounts:
-            if account.id in ids:
-                continue
+            selected = ids[account.id].selected if account.id in ids else False
+            _accounts.append(Account(config=AccountConfig.from_api(account), selected=selected))
 
-            self.accounts.append(Account(config=AccountConfig.from_api(account), selected=False))
+        self.accounts = _accounts
 
     def budget_by_id(self, id: str) -> Budget:
         selected = [b for b in self.budgets if b.config.id == id]
@@ -173,6 +230,30 @@ class AppConfig(BaseModel):
             raise ValueError(f"More than one account found with id {id!r}")
 
         return selected[0]
+
+    def debt_mapping_by_account_id(self, account_id: str) -> DebtAccountMapping:
+        try:
+            return next(
+                debt_mapping
+                for debt_mapping in self.networth_config.debt_assingmet
+                if debt_mapping.debt_account_id == account_id
+            )
+        except StopIteration as e:
+            raise ValueError(f"There is no debt mapping for account with id {account_id!r}") from e
+
+    def debt_account_mapped_to_account_id(self, account_id: str) -> list[str]:
+        return [
+            debt_mapping.debt_account_id
+            for debt_mapping in self.networth_config.debt_assingmet
+            if account_id in debt_mapping.mapping_accounts
+        ]
+
+    def add_account_to_debt_mapping(self, account_id: str, debt_account_id: str):
+        debt_mapping = self.debt_mapping_by_account_id(debt_account_id)
+        debt_mapping.mapping_accounts.append(account_id)
+
+    def is_account_mapped_to_debt_account(self, account_id: str, debt_account_id: str) -> bool:
+        return debt_account_id in self.debt_account_mapped_to_account_id(account_id)
 
 
 def _ensure_config_dir_exists(config_dir: Path):

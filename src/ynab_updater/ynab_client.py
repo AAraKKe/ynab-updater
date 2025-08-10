@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from enum import Enum
-from typing import TypedDict, assert_never
+from typing import TYPE_CHECKING, TypedDict, assert_never
 
 from pydantic import SecretStr
 from textual import Logger
@@ -12,7 +11,6 @@ from ynab.api_client import ApiClient
 from ynab.configuration import Configuration
 from ynab.exceptions import ApiException, NotFoundException
 from ynab.models.account import Account
-from ynab.models.account_type import AccountType
 from ynab.models.budget_summary import BudgetSummary
 from ynab.models.new_transaction import NewTransaction
 from ynab.models.post_transactions_wrapper import PostTransactionsWrapper
@@ -21,39 +19,11 @@ from ynab.models.save_transactions_response_data import SaveTransactionsResponse
 from ynab.models.transaction_cleared_status import TransactionClearedStatus
 from ynab.models.transaction_detail import TransactionDetail
 
-from ynab_updater.config import AppConfig, ClearedStatus
+from ynab_updater.config import AppConfig, ClearedStatus, NetworthType
 from ynab_updater.constats import DEFAULT_ADJUSTMENT_MEMO, DEFAULT_PAYEE_NAME
 
-
-class NetworthType(Enum):
-    CASH = "Cash"
-    SAVINGS = "Savings"
-    DEBT = "Debt"
-    ASSETS = "Assets"
-
-
-def networth_type(account_type: AccountType) -> NetworthType:
-    match account_type:
-        case AccountType.CASH | AccountType.CHECKING:
-            return NetworthType.CASH
-        case AccountType.SAVINGS:
-            return NetworthType.SAVINGS
-        case (
-            AccountType.CREDITCARD
-            | AccountType.LINEOFCREDIT
-            | AccountType.OTHERLIABILITY
-            | AccountType.MORTGAGE
-            | AccountType.AUTOLOAN
-            | AccountType.STUDENTLOAN
-            | AccountType.PERSONALLOAN
-            | AccountType.MEDICALDEBT
-            | AccountType.OTHERDEBT
-        ):
-            return NetworthType.DEBT
-        case AccountType.OTHERASSET:
-            return NetworthType.ASSETS
-        case never:
-            assert_never(never)
+if TYPE_CHECKING:
+    from ynab_updater.config import AppConfig
 
 
 class YNABClientError(Exception):
@@ -69,6 +39,7 @@ class RelativeNetWorth(TypedDict):
 
 @dataclass
 class AccountBalance:
+    account_id: str
     account_name: str
     account_type: NetworthType
     balance: int
@@ -90,23 +61,24 @@ class NetWorthResult:
     def __total_balance(self, accounts: list[AccountBalance]) -> int:
         return sum(acc.balance for acc in accounts)
 
-    def net_wroth(self) -> int:
+    def net_worth(self) -> int:
         cash = self.__total_balance(self.cash)
         savings = self.__total_balance(self.savings)
-        debt = self.__total_balance(self.debt)
         assets = self.__total_balance(self.assets)
 
-        return cash + savings + assets + debt
+        # We should not remove the debt because it is already removed per account
+        # based on the configuration
+        return cash + savings + assets
 
     def relative_net_worth(self) -> list[RelativeNetWorth]:
-        total_net_worth = self.net_wroth()
+        total_net_worth = self.net_worth()
 
         return [
             {
                 "account": acc.account_name,
                 "balance": acc.balance,
                 "type": acc.account_type,
-                "ratio": abs(acc.balance / total_net_worth),
+                "ratio": acc.balance / total_net_worth,
             }
             for acc in self.cash + self.savings + self.assets + self.debt
             if acc.balance != 0
@@ -120,8 +92,9 @@ class NetWorthResult:
         assets = []
 
         for account in accounts:
-            _type = networth_type(account.type)
+            _type = NetworthType.from_account_type(account.type)
             balance = AccountBalance(
+                account_id=account.id,
                 account_name=account.name,
                 account_type=_type,
                 balance=account.balance,
@@ -143,6 +116,27 @@ class NetWorthResult:
             debt=debt,
             assets=assets,
         )
+
+    def apply_debt_remapping(self, config: AppConfig):
+        def reduce_balance(amount: int, account_id: str):
+            all_accounts = [*self.cash, *self.savings, *self.assets]
+            for account in all_accounts:
+                if account.account_id != account_id:
+                    continue
+                account.balance += amount
+
+        for debt_account in self.debt:
+            debt_id = debt_account.account_id
+            accounts_to_share = config.debt_mapping_by_account_id(debt_id).mapping_accounts
+            share_per_account = int(debt_account.balance / len(accounts_to_share))
+            leftover = share_per_account * len(accounts_to_share) - debt_account.balance
+            applied_leftover = False
+
+            for account_id in accounts_to_share:
+                corrected_share = share_per_account if applied_leftover else share_per_account - leftover
+                applied_leftover = True
+
+                reduce_balance(corrected_share, account_id)
 
 
 class YnabHandler:

@@ -93,10 +93,6 @@ NetWorth {
     margin-left: 2;
 }
 
-#main-config-container {
-    padding: 1 1;
-    margin: 1 1;
-}
 
 /* --- Modal Styling (Refactored for Vertical Layout) --- */
 
@@ -206,35 +202,85 @@ AccountRow > .balance-label {
 }
 
 /* Configuration Screen */
-ConfigScreen #config-form {
-    padding: 1 2;
-    align: center top;
-    border: round $accent;
-    height: auto;
+ConfigScreen {
+
+    #config-form {
+        height: auto;
+    }
+
+    .config-container {
+        border: round $accent;
+        padding: 0 1;
+        layout: vertical;
+        height: auto;
+    }
+
+    #accounts-grid {
+        grid-size: 3;
+        margin-top: 1;
+        height: auto;
+        padding: 1;
+    }
+
+    .modal-buttons {
+        height: auto;
+        align: right middle;
+        padding: 1 2;
+    }
+
+    .button-container Button {
+        margin: 0 1;
+    }
+
+    #main-config-container {
+
+    }
+
 }
 
-ConfigScreen .config-container {
-    border: round $accent;
-    padding: 1;
-    layout: vertical;
+DebtAccountMappingRow {
+    layers: below above;
+    align: right middle;
     height: auto;
-}
+    padding: 1 1;
+    # border: round $accent;
 
-ConfigScreen #accounts-grid {
-    grid-size: 3;
-    margin-top: 1;
-    height: auto;
-    padding: 1;
-}
+    #debt-account-mapping-row-container {
+        align: left middle;
+        height: auto;
+        layer: below;
 
-ConfigScreen .button-container {
-    height: auto;
-    align: center middle;
-    padding-top: 1;
-}
+        Label {
+            width: 30;
+            padding: 1 1;
+            layer: below;
+        }
 
-ConfigScreen .button-container Button {
-    margin: 0 1;
+        #selected-accounts-label {
+            width: auto;
+            max-width: 50;
+            layer: below
+        }
+    }
+
+    #interactive-horizontal {
+        height: auto;
+        width: auto;
+        align: right middle;
+
+        Button {
+            margin: 0 2;
+            border: round $primary;
+            layer: above;
+        }
+
+        SelectionList {
+            height: auto;
+            width: auto;
+            layer: above;
+        }
+    }
+
 }
 
 #stats-grid {
@@ -242,6 +288,10 @@ ConfigScreen .button-container Button {
     grid-gutter: 1 2;       /* Add spacing between grid cells */
     padding: 1 0;
     height: auto;           /* Add some vertical padding */
+}
+
+.dim {
+    color: grey;
 }
 
 .stat-card {
@@ -254,4 +304,8 @@ ConfigScreen .button-container Button {
 .stat-title {
     text-style: bold;
     margin-bottom: 1;       /* Space below the title */
+}
+
+.config-description {
+    padding: 1 1;
 }

@@ -177,5 +177,4 @@ class InitScreen(Screen[AppConfig]):
         assert self.config is not None
         self.log.info("Refreshing accounts from YNAB...")
         self.save_accounts(self.config.selected_budget.id)
-        self.config.refresh()
         self.dismiss(self.config)

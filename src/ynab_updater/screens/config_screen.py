@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
-from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Grid, Horizontal, VerticalScroll
 from textual.message import Message
 from textual.screen import Screen
 from textual.widgets import Button, Checkbox, Collapsible, Footer, Header, Input, Label, Select
 
-from ..config import ClearedStatus
+from ynab_updater.config import ClearedStatus
+from ynab_updater.widgets import DebtAccountMappingRow
 
 if TYPE_CHECKING:
     # Revert to absolute imports for type checking
@@ -42,12 +43,14 @@ class ConfigScreen(Screen[bool]):
     def compose(self) -> ComposeResult:
         """Create child widgets for the screen."""
         yield Header()
-        with Vertical(id="main-config-container"):
+        with VerticalScroll(id="main-config-container"):
             with Collapsible(title="Updater Configuration", classes="config-collapsible", collapsed=False):
                 with VerticalScroll(id="config-form"):
-                    with Container(classes="config-container"):
+                    with Container(classes="config-container") as container:
+                        container.border_title = "[bold]Adjustment Memo[/bold]"
                         yield Label(
-                            "[bold]Adjustment Memo[/bold]: this is the memo added to the adjustment transaction"
+                            "[dim]his is the memo added to the adjustment transaction[/dim]",
+                            classes="config-description",
                         )
                         yield Input(
                             value=self.config.adjustment_memo,
@@ -55,10 +58,11 @@ class ConfigScreen(Screen[bool]):
                             id="adjustment-memo",
                         )
 
-                    with Container(classes="config-container"):
+                    with Container(classes="config-container") as container:
+                        container.border_title = "[bold]Adjustment Cleared Status[/bold]"
                         yield Label(
-                            "[bold]Adjustment Cleared Status[/bold]: this is the cleared status to be used for "
-                            "the adjustment transactions"
+                            "[dim]This is the cleared status to be used for the adjustment transactions[/dim]",
+                            classes="config-description",
                         )
                         yield Select(
                             options=[(status.value.title(), status) for status in ClearedStatus],
@@ -66,8 +70,8 @@ class ConfigScreen(Screen[bool]):
                             id="adjustment-cleared-status",
                         )
 
-                    with VerticalScroll(classes="config-container"):
-                        yield Label("[bold]Selected Accounts[/bold]")
+                    with VerticalScroll(classes="config-container") as container:
+                        container.border_title = "[bold]Selected Accounts[/bold]"
                         with Grid(id="accounts-grid"):
                             for account in self.config.accounts:
                                 yield Checkbox(
@@ -77,11 +81,22 @@ class ConfigScreen(Screen[bool]):
                                 )
 
             with Collapsible(title="Net Worth", classes="config-collapsible"):
-                pass
+                with VerticalScroll(id="config-form"):
+                    with Container(classes="config-container") as container:
+                        container.border_title = "[bold]Debt account mapping[/bold]"
+                        yield Label(
+                            "[dim]Link each debt to one or more asset, savings, or cash accounts. If multiple accounts "
+                            "are selected, the debt balance will be distributed among them.\n\n"
+                            "This total is then subtracted from the linked accounts to show their "
+                            "true net value.[/dim]",
+                            classes="config-description",
+                        )
+                        for debt_mapping in self.config.networth_config.debt_assingmet:
+                            yield DebtAccountMappingRow(account_id=debt_mapping.debt_account_id, config=self.config)
 
-            with Horizontal(classes="modal-buttons"):
-                yield Button("Cancel", id="cancel")
-                yield Button("Save", id="save", variant="primary")
+        with Horizontal(classes="modal-buttons"):
+            yield Button("Cancel", id="cancel")
+            yield Button("Save", id="save", variant="primary")
 
         yield Footer()
 

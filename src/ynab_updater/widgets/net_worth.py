@@ -11,9 +11,9 @@ from textual.reactive import var
 from textual.widgets import Digits, Static, TabbedContent, TabPane, Tree
 from wcwidth import wcswidth
 
-from ynab_updater.config import AppConfig
+from ynab_updater.config import AppConfig, NetworthType
 from ynab_updater.utils import format_balance
-from ynab_updater.ynab_client import NetWorthResult, NetworthType, get
+from ynab_updater.ynab_client import NetWorthResult, get
 
 if TYPE_CHECKING:
     from ynab_updater.config import CurrencyFormat
@@ -48,13 +48,21 @@ class AssetsLiabilities(Vertical):
                 yield Static("Cash", classes="stat-title")
                 yield Static("...", id="cash-balance")
                 yield Static("...", id="cash-weight")
-            with Vertical(classes="stat-card"):
+            with Vertical(classes="stat-card", id="debt-card"):
                 yield Static("Debt", classes="stat-title")
                 yield Static("...", id="debt-balance")
-                yield Static("...", id="debt-weight")
+                yield Static("N/A [dim]Hover for info[/dim]", id="debt-weight")
 
     def on_mount(self):
         self.update()
+        tooltip_text = (
+            "Debt is netted against related assets to find their [bold]net value[/bold]. For example, "
+            "a mortgage creates [bold]Home Equity[/bold], while a [bold]credit card balance[/bold] is subtracted "
+            "from your [bold]cash accounts[/bold].\n\nOnly these net values are used in the percentage "
+            "breakdown. The full debt amount is shown for reference only. You can configure how "
+            "each debt is linked in the Config panel."
+        )
+        self.query_one("#debt-weight").tooltip = tooltip_text
 
     def update(self):
         data = {item[0].value: (item[1], item[2]) for item in self.groups()}
@@ -68,7 +76,9 @@ class AssetsLiabilities(Vertical):
             style = "green" if category != "Debt" else "red"
 
             self.query_one(f"#{balance_id}", Static).update(f"[{style}]{formatted_balance}[/]")
-            self.query_one(f"#{weight_id}", Static).update(f"Weight: {formatted_ratio}")
+
+            if category != "Debt":
+                self.query_one(f"#{weight_id}", Static).update(f"Weight: {formatted_ratio}")
 
         self.set_loading(False)
 
@@ -116,6 +126,9 @@ def _format_account_label(account: RelativeNetWorth, currency_format: CurrencyFo
     padding = " " * (width - display_width)
     padded_name = f"{raw_name}{padding}"
 
+    if account["type"] is NetworthType.DEBT:
+        return f"{padded_name} [{style}]{balance_str:>15}[/]"
+
     return f"{padded_name} [{style}]{balance_str:>15}[/] [dim]{ratio_str:>8}[/]"
 
 
@@ -144,7 +157,7 @@ class AccountsBreakdown(Vertical):
             NetworthType.ASSETS: "💰",
             NetworthType.SAVINGS: "🏦",
             NetworthType.CASH: "💵",
-            NetworthType.DEBT: "💳",
+            NetworthType.DEBT: "💸",
         }
 
         sorted_accounts = _sort_accounts(self.networth.relative_net_worth(), self.order_map)
@@ -200,12 +213,13 @@ class NetWorth(Container):
     @work(thread=True)
     def load_networth_result(self):
         networth_data = get().net_worth(self.config.selected_budget.id)
+        networth_data.apply_debt_remapping(self.config)
         self.post_message(self.DataLoaded(networth_data))
 
     def on_net_worth_data_loaded(self, message: NetWorth.DataLoaded):
         self.networth.update(message.networth_data)
 
-        self.total_net_worth = self.networth.net_wroth()
+        self.total_net_worth = self.networth.net_worth()
         self.query_one(Digits).loading = False
 
         self.query_one(AssetsLiabilities).update()

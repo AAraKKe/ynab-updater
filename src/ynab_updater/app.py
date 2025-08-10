@@ -4,7 +4,7 @@ from textual.app import App
 from textual.reactive import var
 
 from .config import AppConfig, ConfigError
-from .screens import InitScreen, MainScreen
+from .screens import ConfigScreen, InitScreen, MainScreen
 from .ynab_client import Account as YnabAccount
 from .ynab_client import YnabHandler
 
@@ -17,6 +17,7 @@ class YnabUpdater(App[None]):
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+r", "refresh_balances", "Refresh Balances"),
     ]
+    TOOLTIP_DELAY = 0.2
 
     config: var[AppConfig] = var(AppConfig.load)
     accounts_data: var[dict[str, YnabAccount]] = var({})
@@ -32,7 +33,7 @@ class YnabUpdater(App[None]):
             if config is None:
                 raise ConfigError("Something went wrong when getting the config file.")
             self.config = config
-            self.push_screen(MainScreen(self.config))
+            self.push_screen(MainScreen(self.config, ConfigScreen(self.config)))
 
         self.push_screen(InitScreen(), save_config)
 
