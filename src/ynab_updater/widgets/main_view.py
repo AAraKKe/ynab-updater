@@ -119,10 +119,4 @@ class MainView(Container):
             update.account_row.input_field.value = ""
             update.account_row.balance_label.loading = False
 
-        net_worth = get().net_worth(self.config.selected_budget.id)
-        self.post_message(NetWorth.DataLoaded(net_worth))
-
-    def on_net_worth_data_loaded(self, event: NetWorth.DataLoaded):
-        net_worth = self.query_one(NetWorth)
-        net_worth.networth.update(event.networth_data)
-        net_worth.total_net_worth = event.networth_data.net_worth()
+        self.query_one(NetWorth).update_networth()

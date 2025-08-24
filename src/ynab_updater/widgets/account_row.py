@@ -86,7 +86,7 @@ class AccountRow(Widget):
             self.query_one(".balance-label", Label).update(new_balance_str)
 
     @property
-    def nees_update(self) -> bool:
+    def needs_update(self) -> bool:
         if (new_balance := self.new_balance_input_milliunits) is None:
             return False
 
@@ -94,7 +94,7 @@ class AccountRow(Widget):
 
     @property
     def account_update(self) -> AccountUpdate | None:
-        if not self.nees_update:
+        if not self.needs_update:
             return None
 
         return AccountUpdate(

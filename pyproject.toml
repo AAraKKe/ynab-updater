@@ -32,6 +32,9 @@ dependencies = [
 [project.scripts]
 ynab-updater = "ynab_updater.cli:app"
 
+[tool.hatch.envs.default]
+installer = "uv"
+
 [tool.hatch.envs.dev]
 dependencies = [
   "textual-dev",
@@ -40,6 +43,7 @@ dependencies = [
   "pytest-cov",
   "ruff",
 ]
+installer = "uv"
 
 [tool.hatch.envs.dev.scripts]
 console = "textual console"

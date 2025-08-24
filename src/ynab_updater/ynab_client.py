@@ -128,7 +128,7 @@ class NetWorthResult:
         for debt_account in self.debt:
             debt_id = debt_account.account_id
             accounts_to_share = config.debt_mapping_by_account_id(debt_id).mapping_accounts
-            share_per_account = int(debt_account.balance / len(accounts_to_share))
+            share_per_account = int(debt_account.balance / max(1, len(accounts_to_share)))
             leftover = share_per_account * len(accounts_to_share) - debt_account.balance
             applied_leftover = False
 
